@@ -1,0 +1,86 @@
+import { describe, expect, it } from "vitest";
+import { applyPlacement, boardFromPlacements, canPlace, createEmptyBoard, createPlacement, enumeratePlacements, isSolved, removePiece } from "./board";
+import { generatePuzzle } from "./generator";
+import { createPrng, shuffleDeterministic } from "./prng";
+import { calculateReward } from "./rewards";
+import { enumerateOrientations, TETROMINO_TYPES } from "./tetrominoes";
+
+describe("tetromino orientations", () => {
+  it("enumerates the expected unique rotation counts", () => {
+    const expected = { I: 2, O: 1, T: 4, L: 4, J: 4, S: 2, Z: 2 };
+    for (const type of TETROMINO_TYPES) {
+      const orientations = enumerateOrientations(type);
+      expect(orientations).toHaveLength(expected[type]);
+      expect(orientations.every((orientation) => orientation.cells.length === 4)).toBe(true);
+      expect(orientations.every((orientation) => orientation.cells.every((cell) => cell.x >= 0 && cell.y >= 0))).toBe(true);
+    }
+  });
+});
+
+describe("board placement", () => {
+  it("accepts legal placement, rejects overlap, and removes immutably", () => {
+    const puzzle = generatePuzzle({ tier: 0, seed: "board-test" });
+    const piece = puzzle.pieces[0];
+    const placement = enumeratePlacements(puzzle, piece)[0];
+    const board = createEmptyBoard();
+    expect(canPlace(puzzle, board, placement).ok).toBe(true);
+    const placed = applyPlacement(puzzle, board, placement);
+    expect(board.placementsByPieceId[piece.id]).toBeUndefined();
+    const secondPiece = puzzle.pieces[1];
+    const overlapping = createPlacement(puzzle, secondPiece, placement.orientationIndex, placement.anchor);
+    expect(canPlace(puzzle, placed, overlapping)).toEqual({ ok: false, reason: "overlap" });
+    const removed = removePiece(placed, piece.id);
+    expect(removed.placementsByPieceId[piece.id]).toBeUndefined();
+  });
+
+  it("detects a solved construction fixture", () => {
+    const puzzle = generatePuzzle({ tier: 0, seed: "solved-test" });
+    expect(puzzle.constructionSolution).toBeDefined();
+    const board = boardFromPlacements(puzzle, puzzle.constructionSolution ?? []);
+    expect(isSolved(puzzle, board)).toBe(true);
+  });
+});
+
+describe("prng", () => {
+  it("is deterministic and does not mutate shuffle input", () => {
+    const first = createPrng("same").nextUint32();
+    const second = createPrng("same").nextUint32();
+    const input = [1, 2, 3, 4];
+    const output = shuffleDeterministic(input, "shuffle");
+    expect(first).toBe(second);
+    expect(input).toEqual([1, 2, 3, 4]);
+    expect(output).toHaveLength(4);
+  });
+});
+
+describe("generation and rewards", () => {
+  it("generates deterministic solvable puzzles for all tiers", () => {
+    for (let tier = 0; tier <= 5; tier += 1) {
+      const a = generatePuzzle({ tier, seed: `tier-${tier}` });
+      const b = generatePuzzle({ tier, seed: `tier-${tier}` });
+      expect(a).toEqual(b);
+      expect(a.usableCellIndices).toHaveLength(a.pieces.length * 4);
+      expect(isSolved(a, boardFromPlacements(a, a.constructionSolution ?? []))).toBe(true);
+      expect(a.difficulty.score).toBeGreaterThanOrEqual(1);
+    }
+  });
+
+  it("uses varied pieces early and makes Tier 1 a 5x5 board with one blocked cell", () => {
+    const tier0 = generatePuzzle({ tier: 0, seed: "variety-check" });
+    const tier0Types = new Set(tier0.pieces.map((piece) => piece.type));
+    expect(tier0Types.size).toBeGreaterThanOrEqual(3);
+
+    const tier1 = generatePuzzle({ tier: 1, seed: "five-by-five-hole" });
+    expect(tier1.width).toBe(5);
+    expect(tier1.height).toBe(5);
+    expect(tier1.blockedCellIndices).toHaveLength(1);
+    expect(tier1.usableCellIndices).toHaveLength(24);
+    expect(tier1.pieces).toHaveLength(6);
+  });
+
+  it("calculates classification multipliers", () => {
+    const puzzle = generatePuzzle({ tier: 0, seed: "reward" });
+    expect(calculateReward(puzzle, "manual")).toBeGreaterThan(calculateReward(puzzle, "assisted"));
+    expect(calculateReward(puzzle, "assisted")).toBeGreaterThan(calculateReward(puzzle, "automated"));
+  });
+});

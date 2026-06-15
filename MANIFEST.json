@@ -1,0 +1,20 @@
+{
+  "package": "puzzle_incremental",
+  "type": "implemented-mvp",
+  "app": {
+    "framework": "Vite",
+    "ui": "React",
+    "language": "TypeScript",
+    "worker": "src/workers/solver.worker.ts",
+    "deployWorkflow": ".github/workflows/deploy.yml"
+  },
+  "verification": [
+    "npm ci",
+    "npm run lint",
+    "npm run typecheck",
+    "npm run test -- --run",
+    "npm run build",
+    "npm run test:e2e",
+    "VITE_BASE_PATH=/puzzle_incremental/ npm run build"
+  ]
+}
