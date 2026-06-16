@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "r
 import { applyPlacement, boardFromPlacements, boardPlacements, canPlace, createEmptyBoard, createPlacement, enumeratePlacements, isSolved, removePiece } from "../core/board";
 import { generatePuzzle, dailySeed } from "../core/generator";
 import { calculateReward } from "../core/rewards";
-import { enumerateOrientations } from "../core/tetrominoes";
+import { enumerateOrientations, TETROMINO_TYPES } from "../core/tetrominoes";
 import type { BoardState, ClearClassification, PieceInstance, Placement, PlacementValidation, PuzzleDefinition, SaveDataV1, SolverSessionId, SolverStats, UpgradeId } from "../core/types";
 import { GAME_CONFIG } from "../game/config";
 import { automatedRewardMultiplier, canPurchaseUpgrade, getUpgradePrice, isAutoSolverReady, isTierUnlocked, manualClearsForTier, nodesPerSecond, parallelSessions, solverOptionsFromUpgrades, type PurchaseOutcome } from "../game/upgrades";
@@ -442,6 +442,20 @@ type AppCopy = (typeof COPY)[keyof typeof COPY];
 
 const COMPUTE_RATE_WINDOW_MS = 60_000;
 const COMPUTE_RATE_TICK_MS = 1_000;
+
+function pieceIdSortValue(id: string): number {
+  const numeric = Number.parseInt(id.replace(/^\D+/, ""), 10);
+  return Number.isFinite(numeric) ? numeric : Number.MAX_SAFE_INTEGER;
+}
+
+function comparePieceTrayOrder(a: PieceInstance, b: PieceInstance): number {
+  const typeDiff = TETROMINO_TYPES.indexOf(a.type) - TETROMINO_TYPES.indexOf(b.type);
+  if (typeDiff !== 0) {
+    return typeDiff;
+  }
+  const idDiff = pieceIdSortValue(a.id) - pieceIdSortValue(b.id);
+  return idDiff !== 0 ? idDiff : a.id.localeCompare(b.id);
+}
 
 function copyForSave(save: SaveDataV1): AppCopy {
   return COPY[save.settings.language ?? "en"];
@@ -1162,6 +1176,7 @@ export function App() {
     return map;
   }, [state.puzzle.board]);
   const selectedPiece = puzzle.pieces.find((piece) => piece.id === state.selectedPieceId) ?? null;
+  const trayPieces = useMemo(() => [...puzzle.pieces].sort(comparePieceTrayOrder), [puzzle.pieces]);
   const selectedPlacementPreview = useMemo(() => {
     if (!selectedPiece || hoverCell === null || state.puzzle.cleared) {
       return null;
@@ -1434,7 +1449,7 @@ export function App() {
         <aside className="panel">
           <h2>{copy.pieces}</h2>
           <div className="piece-tray">
-            {puzzle.pieces.map((piece) => {
+            {trayPieces.map((piece) => {
               const placedPlacement = state.puzzle.board.placementsByPieceId[piece.id];
               const placed = Boolean(placedPlacement);
               const orientationIndex = placedPlacement?.orientationIndex ?? state.rotations[piece.id] ?? 0;

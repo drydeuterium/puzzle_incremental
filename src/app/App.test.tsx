@@ -65,6 +65,41 @@ function seedTwoPiecePuzzle(): void {
   window.localStorage.setItem(BACKUP_SAVE_KEY, JSON.stringify(save));
 }
 
+function seedUnsortedPiecePuzzle(): void {
+  const now = new Date("2026-01-01T00:00:00.000Z");
+  const base = createInitialSave(now);
+  const save = {
+    ...base,
+    settings: { ...base.settings, tutorialCompleted: true },
+    currentPuzzle: {
+      definition: {
+        id: "unsorted-piece-fixture",
+        generatorVersion: GAME_CONFIG.generatorVersion,
+        tier: 0,
+        seed: "unsorted-piece-fixture",
+        width: 4,
+        height: 4,
+        usableCellIndices: Array.from({ length: 16 }, (_, index) => index),
+        blockedCellIndices: [],
+        pieces: [
+          { id: "p0", type: "Z" },
+          { id: "p1", type: "I" },
+          { id: "p2", type: "J" },
+          { id: "p3", type: "I" },
+        ],
+        difficulty: { score: 1, solutionNodes: 1, backtracks: 0, maxDepth: 4, forcedRatio: 1, initialBranching: 4, capped: false },
+      },
+      placements: [],
+      classification: "manual",
+      startedAt: now.toISOString(),
+      elapsedMilliseconds: 0,
+      cleared: false,
+    },
+  };
+  window.localStorage.setItem(SAVE_KEY, JSON.stringify(save));
+  window.localStorage.setItem(BACKUP_SAVE_KEY, JSON.stringify(save));
+}
+
 function seedPurchasedUpgrade(): void {
   const now = new Date("2026-01-01T00:00:00.000Z");
   const base = createInitialSave(now);
@@ -183,6 +218,14 @@ describe("App", () => {
 
     expect(screen.getByTestId("piece-shape-p0")).toBeInTheDocument();
     expect(screen.getByTestId("piece-shape-p1")).toBeInTheDocument();
+  });
+
+  it("groups tray pieces by tetromino type", () => {
+    seedUnsortedPiecePuzzle();
+    render(<App />);
+
+    const labels = Array.from(document.querySelectorAll(".piece-card strong")).map((entry) => entry.textContent);
+    expect(labels).toEqual(["I #1", "I #3", "J #2", "Z #0"]);
   });
 
   it("removes a placed piece from the board with right click", async () => {
