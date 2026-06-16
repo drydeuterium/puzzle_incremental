@@ -131,6 +131,15 @@ describe("App", () => {
     expect(screen.getByTestId("piece-p0")).toHaveTextContent("rot");
   });
 
+  it("renders tier selection through Tier 9", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    await user.click(screen.getByRole("button", { name: "Start Playing" }));
+
+    expect(screen.getByRole("button", { name: "Tier 0" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Tier 9" })).toBeDisabled();
+  });
+
   it("rotates the selected piece with arrow keys and A/D", async () => {
     seedKeyboardRotationPuzzle();
     const user = userEvent.setup();

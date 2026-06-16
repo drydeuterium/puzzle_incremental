@@ -106,7 +106,11 @@ export type UpgradeId =
   | "tier-2"
   | "tier-3"
   | "tier-4"
-  | "tier-5";
+  | "tier-5"
+  | "tier-6"
+  | "tier-7"
+  | "tier-8"
+  | "tier-9";
 
 export type UpgradeState = Readonly<Record<UpgradeId, number>>;
 

@@ -38,34 +38,62 @@ function compatibleBlockedCount(config: TierConfig, seed: string): number {
   return shuffleDeterministic(compatible, `${seed}:blocked-count`)[0];
 }
 
-function chooseBlockedCells(config: TierConfig, seed: string): readonly number[] {
+function makeUsableCellIndices(config: TierConfig, blockedCellIndices: readonly number[]): readonly number[] {
+  const blocked = new Set(blockedCellIndices);
+  return makeRange(config.width * config.height).filter((index) => !blocked.has(index));
+}
+
+function isUsableRegionConnected(config: TierConfig, blockedCellIndices: readonly number[]): boolean {
+  const usable = new Set(makeUsableCellIndices(config, blockedCellIndices));
+  const first = usable.values().next().value as number | undefined;
+  if (first === undefined) {
+    return false;
+  }
+
+  const visited = new Set<number>();
+  const stack = [first];
+  while (stack.length > 0) {
+    const index = stack.pop();
+    if (index === undefined || visited.has(index)) {
+      continue;
+    }
+    visited.add(index);
+    const x = index % config.width;
+    const y = Math.floor(index / config.width);
+    const neighbors = [
+      x > 0 ? index - 1 : null,
+      x < config.width - 1 ? index + 1 : null,
+      y > 0 ? index - config.width : null,
+      y < config.height - 1 ? index + config.width : null,
+    ];
+    for (const neighbor of neighbors) {
+      if (neighbor !== null && usable.has(neighbor) && !visited.has(neighbor)) {
+        stack.push(neighbor);
+      }
+    }
+  }
+
+  return visited.size === usable.size;
+}
+
+function chooseBlockedCells(config: TierConfig, seed: string): readonly number[] | null {
   const blockedCount = compatibleBlockedCount(config, seed);
   if (blockedCount === 0) {
     return [];
   }
-  if (blockedCount === 1) {
-    const center = cellIndex(config.width, { x: Math.floor(config.width / 2), y: Math.floor(config.height / 2) });
-    const candidates = [center, 0, config.width - 1, config.width * (config.height - 1), config.width * config.height - 1];
-    return [shuffleDeterministic(candidates, `${seed}:single-block`)[0]];
-  }
-  const squareAnchors: Cell[] = [];
-  for (let y = 0; y < config.height - 1; y += 1) {
-    for (let x = 0; x < config.width - 1; x += 1) {
-      squareAnchors.push({ x, y });
+
+  const allCellIndices = makeRange(config.width * config.height);
+  const attemptLimit = Math.max(64, config.width * config.height * 4);
+  for (let attempt = 0; attempt < attemptLimit; attempt += 1) {
+    const blocked = shuffleDeterministic(allCellIndices, `${seed}:blocked-cells:${attempt}`)
+      .slice(0, blockedCount)
+      .sort((a, b) => a - b);
+    if (!GAME_CONFIG.generator.connectedUsableRegionRequired || isUsableRegionConnected(config, blocked)) {
+      return blocked;
     }
   }
-  for (const anchor of shuffleDeterministic(squareAnchors, `${seed}:block-square`)) {
-    const square = [
-      cellIndex(config.width, anchor),
-      cellIndex(config.width, { x: anchor.x + 1, y: anchor.y }),
-      cellIndex(config.width, { x: anchor.x, y: anchor.y + 1 }),
-      cellIndex(config.width, { x: anchor.x + 1, y: anchor.y + 1 }),
-    ];
-    if (square.length === blockedCount) {
-      return square;
-    }
-  }
-  return [];
+
+  return null;
 }
 
 function enumerateFillCandidates(config: TierConfig, usable: ReadonlySet<number>): readonly Candidate[] {
@@ -92,8 +120,7 @@ function enumerateFillCandidates(config: TierConfig, usable: ReadonlySet<number>
 }
 
 function fillBoard(config: TierConfig, seed: string, blockedCellIndices: readonly number[]): readonly Placement[] | null {
-  const blocked = new Set(blockedCellIndices);
-  const usableCellIndices = makeRange(config.width * config.height).filter((index) => !blocked.has(index));
+  const usableCellIndices = makeUsableCellIndices(config, blockedCellIndices);
   const usableMask = maskFromIndices(usableCellIndices);
   const usable = new Set(usableCellIndices);
   const allCandidates = enumerateFillCandidates(config, usable);
@@ -198,6 +225,9 @@ export function generatePuzzle(input: GeneratePuzzleInput): PuzzleDefinition {
   for (let attempt = 0; attempt < GAME_CONFIG.generator.attemptLimit; attempt += 1) {
     const attemptSeed = `${input.seed}:attempt-${attempt}`;
     const blockedCellIndices = chooseBlockedCells(config, attemptSeed);
+    if (!blockedCellIndices) {
+      continue;
+    }
     const solution = fillBoard(config, attemptSeed, blockedCellIndices);
     if (!solution) {
       continue;
@@ -216,8 +246,7 @@ export function generatePuzzle(input: GeneratePuzzleInput): PuzzleDefinition {
     throw new Error(`Failed to generate tier ${input.tier} puzzle for seed ${input.seed}`);
   }
 
-  const blocked = new Set(bestBlocked);
-  const usableCellIndices = makeRange(config.width * config.height).filter((index) => !blocked.has(index));
+  const usableCellIndices = makeUsableCellIndices(config, bestBlocked);
   const pieces = bestSolution.map((placement) => ({ id: placement.pieceId, type: placement.pieceType }));
   const withoutDifficulty = {
     id: `${GAME_CONFIG.generatorVersion}:${input.tier}:${input.seed}`,

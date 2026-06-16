@@ -27,8 +27,15 @@ describe("save repository", () => {
     const storage = window.localStorage;
     storage.clear();
     const save = createInitialSave(new Date("2026-01-01T00:00:00.000Z"));
+    const legacyUpgradeLevels = Object.fromEntries(
+      Object.entries(save.progression.upgradeLevels).filter(([upgradeId]) => !["tier-6", "tier-7", "tier-8", "tier-9"].includes(upgradeId)),
+    );
     const legacySave = {
       ...save,
+      progression: {
+        ...save.progression,
+        upgradeLevels: legacyUpgradeLevels,
+      },
       settings: {
         visualization: save.settings.visualization,
         animationSpeed: save.settings.animationSpeed,
@@ -43,5 +50,7 @@ describe("save repository", () => {
     expect(loaded.save.settings.tutorialCompleted).toBe(false);
     expect(loaded.save.settings.hidePurchasedUpgrades).toBe(true);
     expect(loaded.save.statistics.manualClearsByTier).toEqual({});
+    expect(loaded.save.progression.upgradeLevels["tier-6"]).toBe(0);
+    expect(loaded.save.progression.upgradeLevels["tier-9"]).toBe(0);
   });
 });

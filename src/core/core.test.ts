@@ -4,6 +4,38 @@ import { generatePuzzle } from "./generator";
 import { createPrng, shuffleDeterministic } from "./prng";
 import { calculateReward } from "./rewards";
 import { enumerateOrientations, TETROMINO_TYPES } from "./tetrominoes";
+import type { PuzzleDefinition } from "./types";
+
+function isUsableRegionConnected(puzzle: PuzzleDefinition): boolean {
+  const usable = new Set(puzzle.usableCellIndices);
+  const first = puzzle.usableCellIndices[0];
+  if (first === undefined) {
+    return false;
+  }
+  const visited = new Set<number>();
+  const stack = [first];
+  while (stack.length > 0) {
+    const index = stack.pop();
+    if (index === undefined || visited.has(index)) {
+      continue;
+    }
+    visited.add(index);
+    const x = index % puzzle.width;
+    const y = Math.floor(index / puzzle.width);
+    const neighbors = [
+      x > 0 ? index - 1 : null,
+      x < puzzle.width - 1 ? index + 1 : null,
+      y > 0 ? index - puzzle.width : null,
+      y < puzzle.height - 1 ? index + puzzle.width : null,
+    ];
+    for (const neighbor of neighbors) {
+      if (neighbor !== null && usable.has(neighbor) && !visited.has(neighbor)) {
+        stack.push(neighbor);
+      }
+    }
+  }
+  return visited.size === usable.size;
+}
 
 describe("tetromino orientations", () => {
   it("enumerates the expected unique rotation counts", () => {
@@ -55,7 +87,7 @@ describe("prng", () => {
 
 describe("generation and rewards", () => {
   it("generates deterministic solvable puzzles for all tiers", () => {
-    for (let tier = 0; tier <= 5; tier += 1) {
+    for (let tier = 0; tier <= 9; tier += 1) {
       const a = generatePuzzle({ tier, seed: `tier-${tier}` });
       const b = generatePuzzle({ tier, seed: `tier-${tier}` });
       expect(a).toEqual(b);
@@ -65,17 +97,26 @@ describe("generation and rewards", () => {
     }
   });
 
-  it("uses varied pieces early and makes Tier 1 a 5x5 board with one blocked cell", () => {
+  it("uses varied pieces early and generates the planned hole tiers", () => {
     const tier0 = generatePuzzle({ tier: 0, seed: "variety-check" });
     const tier0Types = new Set(tier0.pieces.map((piece) => piece.type));
     expect(tier0Types.size).toBeGreaterThanOrEqual(3);
 
-    const tier1 = generatePuzzle({ tier: 1, seed: "five-by-five-hole" });
-    expect(tier1.width).toBe(5);
-    expect(tier1.height).toBe(5);
-    expect(tier1.blockedCellIndices).toHaveLength(1);
-    expect(tier1.usableCellIndices).toHaveLength(24);
-    expect(tier1.pieces).toHaveLength(6);
+    const planned = [
+      { tier: 1, seed: "five-by-five-hole", width: 5, height: 5, blocked: 1, usable: 24, pieces: 6 },
+      { tier: 3, seed: "five-by-six-two-holes", width: 5, height: 6, blocked: 2, usable: 28, pieces: 7 },
+      { tier: 6, seed: "six-by-seven-two-holes", width: 6, height: 7, blocked: 2, usable: 40, pieces: 10 },
+      { tier: 7, seed: "seven-by-seven-five-holes", width: 7, height: 7, blocked: 5, usable: 44, pieces: 11 },
+    ];
+    for (const expected of planned) {
+      const puzzle = generatePuzzle({ tier: expected.tier, seed: expected.seed });
+      expect(puzzle.width).toBe(expected.width);
+      expect(puzzle.height).toBe(expected.height);
+      expect(puzzle.blockedCellIndices).toHaveLength(expected.blocked);
+      expect(puzzle.usableCellIndices).toHaveLength(expected.usable);
+      expect(puzzle.pieces).toHaveLength(expected.pieces);
+      expect(isUsableRegionConnected(puzzle)).toBe(true);
+    }
   });
 
   it("calculates classification multipliers", () => {

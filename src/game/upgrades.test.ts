@@ -18,6 +18,21 @@ describe("upgrades", () => {
     expect(options.heuristics.deadStateCacheEntries).toBe(2000);
   });
 
+  it("unlocks tiers through the linear chain", () => {
+    const levels = {
+      ...initialUpgradeState(),
+      "tier-1": 1,
+      "tier-2": 1,
+      "auto-solver": 1,
+      "tier-3": 1,
+    };
+    expect(initialUpgradeState()["tier-9"]).toBe(0);
+    expect(canPurchaseUpgrade(levels, 4500, "tier-4").ok).toBe(true);
+    expect(isTierUnlocked({ ...levels, "tier-4": 1 }, 4)).toBe(true);
+    expect(canPurchaseUpgrade({ ...levels, "tier-4": 1 }, 7500, "tier-5").ok).toBe(true);
+    expect(canPurchaseUpgrade({ ...levels, "tier-4": 1, "tier-5": 1 }, 12_000, "tier-6").ok).toBe(true);
+  });
+
   it("uses slower base solver speed and requires manual clears per tier", () => {
     const levels = { ...initialUpgradeState(), "auto-solver": 1 };
     const statistics = {

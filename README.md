@@ -41,7 +41,7 @@ https://drydeuterium.github.io/puzzle_incremental/
 
 アップグレードで解放できる主な要素:
 
-- `Tier 1` から `Tier 5`: 新しい難度帯
+- `Tier 1` から `Tier 9`: 新しい難度帯
 - `Placement Scanner`: 置ける候補を探す
 - `Contradiction Detector`: 現在の局面が解けるか検査する
 - `Forced Move`: 必ず必要になる配置を探す

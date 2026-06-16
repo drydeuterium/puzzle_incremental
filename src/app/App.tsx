@@ -128,6 +128,10 @@ const UPGRADE_NAMES_EN: Record<UpgradeId, string> = {
   "tier-3": "Tier 3",
   "tier-4": "Tier 4",
   "tier-5": "Tier 5",
+  "tier-6": "Tier 6",
+  "tier-7": "Tier 7",
+  "tier-8": "Tier 8",
+  "tier-9": "Tier 9",
 };
 
 const UPGRADE_NAMES_JA: Record<UpgradeId, string> = {
@@ -147,6 +151,10 @@ const UPGRADE_NAMES_JA: Record<UpgradeId, string> = {
   "tier-3": "Tier 3",
   "tier-4": "Tier 4",
   "tier-5": "Tier 5",
+  "tier-6": "Tier 6",
+  "tier-7": "Tier 7",
+  "tier-8": "Tier 8",
+  "tier-9": "Tier 9",
 };
 
 const COPY = {

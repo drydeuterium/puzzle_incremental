@@ -1,6 +1,6 @@
 import { GAME_CONFIG } from "../game/config";
 import { initialUpgradeState } from "../game/upgrades";
-import type { SaveDataV1, Statistics, UserSettings } from "../core/types";
+import type { SaveDataV1, Statistics, UpgradeState, UserSettings } from "../core/types";
 
 export const SAVE_KEY = "puzzle_incremental.save.v1";
 export const BACKUP_SAVE_KEY = "puzzle_incremental.save.backup";
@@ -88,6 +88,16 @@ function normalizeCountRecord(value: unknown): Readonly<Record<string, number>> 
   return Object.fromEntries(Object.entries(value).filter(([, count]) => isSafeNonNegativeInteger(count))) as Record<string, number>;
 }
 
+function normalizeUpgradeState(value: Record<string, unknown>): UpgradeState {
+  const defaults = initialUpgradeState();
+  return Object.fromEntries(
+    Object.entries(defaults).map(([upgradeId, defaultLevel]) => [
+      upgradeId,
+      isSafeNonNegativeInteger(value[upgradeId]) ? value[upgradeId] : defaultLevel,
+    ]),
+  ) as UpgradeState;
+}
+
 export function validateSaveData(value: unknown): SaveDataV1 | null {
   if (!isRecord(value) || value.schemaVersion !== 1) {
     return null;
@@ -112,6 +122,10 @@ export function validateSaveData(value: unknown): SaveDataV1 | null {
   const defaultStatistics = createInitialStatistics(typeof value.createdAt === "string" ? value.createdAt : new Date().toISOString());
   const normalized: SaveDataV1 = {
     ...(value as SaveDataV1),
+    progression: {
+      ...(value as SaveDataV1).progression,
+      upgradeLevels: normalizeUpgradeState(progression.upgradeLevels),
+    },
     statistics: {
       ...(value as SaveDataV1).statistics,
       manualClearsByTier: isRecord(statistics.manualClearsByTier) ? normalizeCountRecord(statistics.manualClearsByTier) : defaultStatistics.manualClearsByTier,

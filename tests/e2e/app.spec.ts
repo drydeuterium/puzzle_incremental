@@ -17,8 +17,8 @@ test("fresh start manual clear", async ({ page }) => {
     ];
     const save = {
       schemaVersion: 1,
-      gameConfigVersion: "1.1.0-mvp",
-      generatorVersion: 2,
+      gameConfigVersion: "1.2.0-tier-rebalance",
+      generatorVersion: 3,
       createdAt: now,
       updatedAt: now,
       economy: { compute: 0, lifetimeCompute: 0 },
@@ -40,6 +40,10 @@ test("fresh start manual clear", async ({ page }) => {
           "tier-3": 0,
           "tier-4": 0,
           "tier-5": 0,
+          "tier-6": 0,
+          "tier-7": 0,
+          "tier-8": 0,
+          "tier-9": 0,
         },
         selectedTier: 0,
         autoSeedCounters: {},
@@ -47,7 +51,7 @@ test("fresh start manual clear", async ({ page }) => {
       currentPuzzle: {
         definition: {
           id: "e2e-fixture",
-          generatorVersion: 2,
+          generatorVersion: 3,
           tier: 0,
           seed: "e2e-fixture",
           width: 4,
@@ -79,7 +83,16 @@ test("fresh start manual clear", async ({ page }) => {
         startedAt: now,
         lastSavedAt: now,
       },
-      settings: { visualization: "on", animationSpeed: 1, highContrast: false, theme: "system", language: "en", tutorialCompleted: true },
+      settings: {
+        visualization: "on",
+        animationSpeed: 1,
+        highContrast: false,
+        theme: "system",
+        language: "en",
+        notificationsEnabled: true,
+        tutorialCompleted: true,
+        hidePurchasedUpgrades: true,
+      },
     };
     localStorage.setItem("puzzle_incremental.save.v1", JSON.stringify(save));
     localStorage.setItem("puzzle_incremental.save.backup", JSON.stringify(save));
