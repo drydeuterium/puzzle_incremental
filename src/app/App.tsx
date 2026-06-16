@@ -621,9 +621,11 @@ export function App() {
       if (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement || target instanceof HTMLSelectElement) {
         return;
       }
-      if (event.key === "r" || event.key === "E") {
+      if (event.key === "ArrowRight" || event.key === "d" || event.key === "D" || event.key === "r" || event.key === "E") {
+        event.preventDefault();
         dispatch({ type: "rotate", direction: 1 });
-      } else if (event.key === "Q" || (event.key === "R" && event.shiftKey)) {
+      } else if (event.key === "ArrowLeft" || event.key === "a" || event.key === "A" || event.key === "Q" || (event.key === "R" && event.shiftKey)) {
+        event.preventDefault();
         dispatch({ type: "rotate", direction: -1 });
       } else if (event.key === "z" || (event.key === "z" && event.ctrlKey)) {
         dispatch({ type: "undo" });
