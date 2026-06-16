@@ -1,11 +1,17 @@
 import type { UpgradeId } from "../core/types";
 
+export type ShapeConfig = Readonly<{
+  style: "jagged";
+  interiorBlockedCellCount: number;
+}>;
+
 export type TierConfig = Readonly<{
   id: number;
   width: number;
   height: number;
   pieceCount: number;
   allowedBlockedCellCounts: readonly number[];
+  shape?: ShapeConfig;
   difficultyScoreMin: number;
   difficultyScoreMax: number;
   unlockUpgradeId: UpgradeId | null;
@@ -21,8 +27,8 @@ export type UpgradeConfig = Readonly<{
 }>;
 
 export const GAME_CONFIG = {
-  gameConfigVersion: "1.2.0-tier-rebalance",
-  generatorVersion: 3,
+  gameConfigVersion: "1.3.0-shape-complexity",
+  generatorVersion: 4,
   currency: {
     name: "Compute",
     symbol: "C",
@@ -61,15 +67,15 @@ export const GAME_CONFIG = {
   },
   tiers: [
     { id: 0, width: 4, height: 4, pieceCount: 4, allowedBlockedCellCounts: [0], difficultyScoreMin: 1, difficultyScoreMax: 180, unlockUpgradeId: null },
-    { id: 1, width: 5, height: 5, pieceCount: 6, allowedBlockedCellCounts: [1], difficultyScoreMin: 20, difficultyScoreMax: 320, unlockUpgradeId: "tier-1" },
-    { id: 2, width: 6, height: 4, pieceCount: 6, allowedBlockedCellCounts: [0], difficultyScoreMin: 40, difficultyScoreMax: 360, unlockUpgradeId: "tier-2" },
-    { id: 3, width: 5, height: 6, pieceCount: 7, allowedBlockedCellCounts: [2], difficultyScoreMin: 55, difficultyScoreMax: 420, unlockUpgradeId: "tier-3" },
-    { id: 4, width: 6, height: 6, pieceCount: 8, allowedBlockedCellCounts: [4], difficultyScoreMin: 70, difficultyScoreMax: 500, unlockUpgradeId: "tier-4" },
-    { id: 5, width: 6, height: 6, pieceCount: 9, allowedBlockedCellCounts: [0], difficultyScoreMin: 90, difficultyScoreMax: 580, unlockUpgradeId: "tier-5" },
-    { id: 6, width: 6, height: 7, pieceCount: 10, allowedBlockedCellCounts: [2], difficultyScoreMin: 110, difficultyScoreMax: 680, unlockUpgradeId: "tier-6" },
-    { id: 7, width: 7, height: 7, pieceCount: 11, allowedBlockedCellCounts: [5], difficultyScoreMin: 130, difficultyScoreMax: 800, unlockUpgradeId: "tier-7" },
-    { id: 8, width: 8, height: 6, pieceCount: 12, allowedBlockedCellCounts: [0], difficultyScoreMin: 150, difficultyScoreMax: 920, unlockUpgradeId: "tier-8" },
-    { id: 9, width: 8, height: 8, pieceCount: 16, allowedBlockedCellCounts: [0], difficultyScoreMin: 190, difficultyScoreMax: 1200, unlockUpgradeId: "tier-9" },
+    { id: 1, width: 5, height: 5, pieceCount: 6, allowedBlockedCellCounts: [1], shape: { style: "jagged", interiorBlockedCellCount: 1 }, difficultyScoreMin: 20, difficultyScoreMax: 320, unlockUpgradeId: "tier-1" },
+    { id: 2, width: 7, height: 4, pieceCount: 6, allowedBlockedCellCounts: [4], shape: { style: "jagged", interiorBlockedCellCount: 1 }, difficultyScoreMin: 40, difficultyScoreMax: 360, unlockUpgradeId: "tier-2" },
+    { id: 3, width: 6, height: 5, pieceCount: 7, allowedBlockedCellCounts: [2], shape: { style: "jagged", interiorBlockedCellCount: 1 }, difficultyScoreMin: 55, difficultyScoreMax: 420, unlockUpgradeId: "tier-3" },
+    { id: 4, width: 7, height: 6, pieceCount: 8, allowedBlockedCellCounts: [10], shape: { style: "jagged", interiorBlockedCellCount: 3 }, difficultyScoreMin: 70, difficultyScoreMax: 500, unlockUpgradeId: "tier-4" },
+    { id: 5, width: 7, height: 6, pieceCount: 9, allowedBlockedCellCounts: [6], shape: { style: "jagged", interiorBlockedCellCount: 2 }, difficultyScoreMin: 90, difficultyScoreMax: 580, unlockUpgradeId: "tier-5" },
+    { id: 6, width: 7, height: 7, pieceCount: 10, allowedBlockedCellCounts: [9], shape: { style: "jagged", interiorBlockedCellCount: 3 }, difficultyScoreMin: 110, difficultyScoreMax: 680, unlockUpgradeId: "tier-6" },
+    { id: 7, width: 8, height: 7, pieceCount: 11, allowedBlockedCellCounts: [12], shape: { style: "jagged", interiorBlockedCellCount: 4 }, difficultyScoreMin: 130, difficultyScoreMax: 800, unlockUpgradeId: "tier-7" },
+    { id: 8, width: 8, height: 7, pieceCount: 12, allowedBlockedCellCounts: [8], shape: { style: "jagged", interiorBlockedCellCount: 3 }, difficultyScoreMin: 150, difficultyScoreMax: 920, unlockUpgradeId: "tier-8" },
+    { id: 9, width: 10, height: 8, pieceCount: 16, allowedBlockedCellCounts: [16], shape: { style: "jagged", interiorBlockedCellCount: 5 }, difficultyScoreMin: 190, difficultyScoreMax: 1200, unlockUpgradeId: "tier-9" },
   ] satisfies readonly TierConfig[],
   upgrades: [
     { id: "placement-scanner", name: "Placement Scanner", maxLevel: 1, basePrice: 120, priceMultiplier: 1, prerequisites: [] },

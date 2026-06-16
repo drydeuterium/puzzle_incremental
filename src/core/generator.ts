@@ -76,6 +76,29 @@ function isUsableRegionConnected(config: TierConfig, blockedCellIndices: readonl
   return visited.size === usable.size;
 }
 
+function isBoundaryCell(config: TierConfig, index: number): boolean {
+  const x = index % config.width;
+  const y = Math.floor(index / config.width);
+  return x === 0 || y === 0 || x === config.width - 1 || y === config.height - 1;
+}
+
+function chooseJaggedBlockedCells(config: TierConfig, seed: string, blockedCount: number, attempt: number): readonly number[] | null {
+  const allCellIndices = makeRange(config.width * config.height);
+  const boundaryCells = allCellIndices.filter((index) => isBoundaryCell(config, index));
+  const interiorCells = allCellIndices.filter((index) => !isBoundaryCell(config, index));
+  const interiorBlockedCount = Math.min(config.shape?.interiorBlockedCellCount ?? 0, blockedCount, interiorCells.length);
+  const boundaryBlockedCount = blockedCount - interiorBlockedCount;
+  if (boundaryBlockedCount > boundaryCells.length) {
+    return null;
+  }
+
+  const blocked = [
+    ...shuffleDeterministic(interiorCells, `${seed}:interior-holes:${attempt}`).slice(0, interiorBlockedCount),
+    ...shuffleDeterministic(boundaryCells, `${seed}:edge-carve:${attempt}`).slice(0, boundaryBlockedCount),
+  ].sort((a, b) => a - b);
+  return blocked.length === blockedCount ? blocked : null;
+}
+
 function chooseBlockedCells(config: TierConfig, seed: string): readonly number[] | null {
   const blockedCount = compatibleBlockedCount(config, seed);
   if (blockedCount === 0) {
@@ -85,9 +108,14 @@ function chooseBlockedCells(config: TierConfig, seed: string): readonly number[]
   const allCellIndices = makeRange(config.width * config.height);
   const attemptLimit = Math.max(64, config.width * config.height * 4);
   for (let attempt = 0; attempt < attemptLimit; attempt += 1) {
-    const blocked = shuffleDeterministic(allCellIndices, `${seed}:blocked-cells:${attempt}`)
-      .slice(0, blockedCount)
-      .sort((a, b) => a - b);
+    const blocked = config.shape?.style === "jagged"
+      ? chooseJaggedBlockedCells(config, seed, blockedCount, attempt)
+      : shuffleDeterministic(allCellIndices, `${seed}:blocked-cells:${attempt}`)
+        .slice(0, blockedCount)
+        .sort((a, b) => a - b);
+    if (!blocked) {
+      continue;
+    }
     if (!GAME_CONFIG.generator.connectedUsableRegionRequired || isUsableRegionConnected(config, blocked)) {
       return blocked;
     }

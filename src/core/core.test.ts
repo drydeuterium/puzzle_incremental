@@ -37,6 +37,12 @@ function isUsableRegionConnected(puzzle: PuzzleDefinition): boolean {
   return visited.size === usable.size;
 }
 
+function isBoundaryCell(puzzle: PuzzleDefinition, index: number): boolean {
+  const x = index % puzzle.width;
+  const y = Math.floor(index / puzzle.width);
+  return x === 0 || y === 0 || x === puzzle.width - 1 || y === puzzle.height - 1;
+}
+
 describe("tetromino orientations", () => {
   it("enumerates the expected unique rotation counts", () => {
     const expected = { I: 2, O: 1, T: 4, L: 4, J: 4, S: 2, Z: 2 };
@@ -97,22 +103,27 @@ describe("generation and rewards", () => {
     }
   });
 
-  it("uses varied pieces early and generates the planned hole tiers", () => {
+  it("uses varied pieces early and generates fixed-area jagged tiers", () => {
     const tier0 = generatePuzzle({ tier: 0, seed: "variety-check" });
     const tier0Types = new Set(tier0.pieces.map((piece) => piece.type));
     expect(tier0Types.size).toBeGreaterThanOrEqual(3);
 
     const planned = [
-      { tier: 1, seed: "five-by-five-hole", width: 5, height: 5, blocked: 1, usable: 24, pieces: 6 },
-      { tier: 3, seed: "five-by-six-two-holes", width: 5, height: 6, blocked: 2, usable: 28, pieces: 7 },
-      { tier: 6, seed: "six-by-seven-two-holes", width: 6, height: 7, blocked: 2, usable: 40, pieces: 10 },
-      { tier: 7, seed: "seven-by-seven-five-holes", width: 7, height: 7, blocked: 5, usable: 44, pieces: 11 },
+      { tier: 1, seed: "five-by-five-hole", width: 5, height: 5, blocked: 1, interiorBlocked: 1, usable: 24, pieces: 6 },
+      { tier: 2, seed: "seven-by-four-jagged", width: 7, height: 4, blocked: 4, interiorBlocked: 1, usable: 24, pieces: 6 },
+      { tier: 3, seed: "six-by-five-jagged", width: 6, height: 5, blocked: 2, interiorBlocked: 1, usable: 28, pieces: 7 },
+      { tier: 4, seed: "seven-by-six-jagged", width: 7, height: 6, blocked: 10, interiorBlocked: 3, usable: 32, pieces: 8 },
+      { tier: 6, seed: "seven-by-seven-jagged", width: 7, height: 7, blocked: 9, interiorBlocked: 3, usable: 40, pieces: 10 },
+      { tier: 7, seed: "eight-by-seven-jagged", width: 8, height: 7, blocked: 12, interiorBlocked: 4, usable: 44, pieces: 11 },
+      { tier: 9, seed: "ten-by-eight-jagged", width: 10, height: 8, blocked: 16, interiorBlocked: 5, usable: 64, pieces: 16 },
     ];
     for (const expected of planned) {
       const puzzle = generatePuzzle({ tier: expected.tier, seed: expected.seed });
+      const interiorBlocked = puzzle.blockedCellIndices.filter((index) => !isBoundaryCell(puzzle, index)).length;
       expect(puzzle.width).toBe(expected.width);
       expect(puzzle.height).toBe(expected.height);
       expect(puzzle.blockedCellIndices).toHaveLength(expected.blocked);
+      expect(interiorBlocked).toBe(expected.interiorBlocked);
       expect(puzzle.usableCellIndices).toHaveLength(expected.usable);
       expect(puzzle.pieces).toHaveLength(expected.pieces);
       expect(isUsableRegionConnected(puzzle)).toBe(true);
