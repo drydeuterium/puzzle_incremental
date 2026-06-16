@@ -1,6 +1,11 @@
 import { GAME_CONFIG } from "./config";
 import type { SolverOptions, Statistics, UpgradeId, UpgradeState } from "../core/types";
 
+export type PurchaseOutcome = Readonly<
+  | { ok: true; price: number }
+  | { ok: false; reason: "maximum-level" | "missing-prerequisite" | "not-enough-compute"; price: number; prerequisite?: UpgradeId }
+>;
+
 export function initialUpgradeState(): UpgradeState {
   return Object.fromEntries(GAME_CONFIG.upgrades.map((upgrade) => [upgrade.id, 0])) as UpgradeState;
 }
@@ -18,19 +23,19 @@ export function getUpgradePrice(id: UpgradeId, level: number): number {
   return Math.floor(upgrade.basePrice * upgrade.priceMultiplier ** level);
 }
 
-export function canPurchaseUpgrade(levels: UpgradeState, compute: number, id: UpgradeId): Readonly<{ ok: true; price: number } | { ok: false; reason: string; price: number }> {
+export function canPurchaseUpgrade(levels: UpgradeState, compute: number, id: UpgradeId): PurchaseOutcome {
   const upgrade = getUpgradeConfig(id);
   const level = levels[id] ?? 0;
   const price = getUpgradePrice(id, level);
   if (level >= upgrade.maxLevel) {
-    return { ok: false, reason: "maximum level", price };
+    return { ok: false, reason: "maximum-level", price };
   }
   const missing = upgrade.prerequisites.find((prerequisite) => (levels[prerequisite] ?? 0) <= 0);
   if (missing) {
-    return { ok: false, reason: `requires ${getUpgradeConfig(missing).name}`, price };
+    return { ok: false, reason: "missing-prerequisite", prerequisite: missing, price };
   }
   if (compute < price) {
-    return { ok: false, reason: "not enough Compute", price };
+    return { ok: false, reason: "not-enough-compute", price };
   }
   return { ok: true, price };
 }

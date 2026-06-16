@@ -222,6 +222,9 @@ describe("App", () => {
     await user.selectOptions(screen.getByLabelText("Language"), "ja");
     expect(screen.getByRole("heading", { name: "設定" })).toBeInTheDocument();
     expect(screen.getByLabelText("言語")).toHaveValue("ja");
+    expect(screen.getByText("配置スキャナー")).toBeInTheDocument();
+    expect(screen.getAllByText(/Compute不足/).length).toBeGreaterThan(0);
+    expect(screen.getByTestId("solver-status")).toHaveTextContent("待機");
   });
 
   it("hides purchased upgrades by default and can show them", async () => {

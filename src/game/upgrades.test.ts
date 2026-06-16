@@ -5,9 +5,9 @@ import { automatedRewardMultiplier, canPurchaseUpgrade, initialUpgradeState, isA
 describe("upgrades", () => {
   it("blocks missing funds and prerequisites", () => {
     const levels = initialUpgradeState();
-    expect(canPurchaseUpgrade(levels, 0, "placement-scanner").ok).toBe(false);
+    expect(canPurchaseUpgrade(levels, 0, "placement-scanner")).toMatchObject({ ok: false, reason: "not-enough-compute" });
     expect(canPurchaseUpgrade(levels, 120, "placement-scanner").ok).toBe(true);
-    expect(canPurchaseUpgrade(levels, 10_000, "contradiction-detector").ok).toBe(false);
+    expect(canPurchaseUpgrade(levels, 10_000, "contradiction-detector")).toMatchObject({ ok: false, reason: "missing-prerequisite", prerequisite: "placement-scanner" });
   });
 
   it("maps purchased levels to solver options and tier unlocks", () => {
