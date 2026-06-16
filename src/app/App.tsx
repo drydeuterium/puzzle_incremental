@@ -908,6 +908,14 @@ export function App() {
     }
   };
 
+  const handleBoardWheel = (event: React.WheelEvent) => {
+    if (!selectedPiece || state.puzzle.cleared || event.deltaY === 0) {
+      return;
+    }
+    event.preventDefault();
+    dispatch({ type: "rotate", direction: event.deltaY > 0 ? 1 : -1 });
+  };
+
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       const target = event.target;
@@ -1058,6 +1066,7 @@ export function App() {
             role="grid"
             aria-label={copy.boardLabel}
             onMouseLeave={() => setHoverCell(null)}
+            onWheel={handleBoardWheel}
           >
             {Array.from({ length: puzzle.width * puzzle.height }, (_, index) => {
               const placed = placedByCell.get(index);

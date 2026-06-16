@@ -128,6 +128,21 @@ describe("App", () => {
     expect(piece).toHaveTextContent("rot 0");
   });
 
+  it("rotates the selected piece with board wheel direction", async () => {
+    seedKeyboardRotationPuzzle();
+    const user = userEvent.setup();
+    render(<App />);
+    const piece = screen.getByTestId("piece-p0");
+    const board = screen.getByRole("grid", { name: "Puzzle board" });
+
+    await user.click(piece);
+    fireEvent.wheel(board, { deltaY: 100 });
+    expect(piece).toHaveTextContent("rot 1");
+
+    fireEvent.wheel(board, { deltaY: -100 });
+    expect(piece).toHaveTextContent("rot 0");
+  });
+
   it("shows piece silhouettes in the tray", () => {
     seedTwoPiecePuzzle();
     render(<App />);
