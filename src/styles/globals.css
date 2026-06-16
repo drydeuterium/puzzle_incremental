@@ -148,7 +148,8 @@ button:disabled {
 
 .piece-card.selected,
 .tier-switcher .selected,
-.toggle-button.selected {
+.toggle-button.selected,
+.solver-controls .selected {
   border-color: var(--accent);
   box-shadow: inset 0 0 0 2px var(--accent);
 }
@@ -207,7 +208,8 @@ button:disabled {
 
 .board-panel {
   display: grid;
-  grid-template-rows: auto minmax(0, 1fr);
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  gap: 10px;
   overflow: hidden;
 }
 
@@ -241,7 +243,7 @@ button:disabled {
   align-self: start;
   display: grid;
   gap: 4px;
-  width: min(100%, 620px, calc(100vh - 220px));
+  width: min(100%, 600px, calc(100vh - 360px));
   margin: 0 auto;
 }
 
@@ -312,6 +314,96 @@ button:disabled {
 
 .cell.solver-preview:not(.placed) {
   background: repeating-linear-gradient(135deg, var(--surface-2), var(--surface-2) 5px, color-mix(in srgb, var(--accent) 35%, var(--surface)) 5px, color-mix(in srgb, var(--accent) 35%, var(--surface)) 10px);
+}
+
+.solver-lane {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: 8px;
+  min-height: 132px;
+  overflow: hidden;
+}
+
+.solver-lane-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.solver-lane-header h2 {
+  margin: 0;
+}
+
+.solver-lane-header span,
+.solver-run-meta {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.solver-run-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 8px;
+  min-height: 0;
+  overflow: auto;
+  padding-right: 4px;
+}
+
+.solver-run {
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr);
+  gap: 6px;
+  min-height: 108px;
+  padding: 8px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--surface);
+}
+
+.solver-run.active {
+  border-color: color-mix(in srgb, var(--accent) 50%, var(--line));
+}
+
+.solver-run-header,
+.solver-run-meta {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  justify-content: space-between;
+  min-width: 0;
+}
+
+.solver-run-meta span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mini-board {
+  align-self: start;
+  display: grid;
+  gap: 2px;
+  width: min(100%, 112px);
+  margin: 0 auto;
+}
+
+.mini-cell {
+  aspect-ratio: 1;
+  min-width: 8px;
+  min-height: 8px;
+  border: 1px solid var(--line);
+  border-radius: 2px;
+  background: var(--surface-2);
+}
+
+.mini-cell.placed {
+  border-color: var(--piece-border);
+  background: var(--piece-color);
+  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 16%);
+}
+
+.mini-cell.blocked {
+  background: repeating-linear-gradient(45deg, #303030, #303030 3px, #555 3px, #555 6px);
 }
 
 .solver-grid {

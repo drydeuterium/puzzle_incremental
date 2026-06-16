@@ -1,6 +1,6 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { GAME_CONFIG } from "../game/config";
 import { BACKUP_SAVE_KEY, createInitialSave, SAVE_KEY } from "../persistence/schema";
 import { App } from "./App";
@@ -107,6 +107,7 @@ function seedAutoSolverProgress(manualClears: number): void {
 
 describe("App", () => {
   beforeEach(() => {
+    vi.unstubAllGlobals();
     window.localStorage.clear();
   });
 
@@ -237,6 +238,7 @@ describe("App", () => {
     seedAutoSolverProgress(4);
     const { unmount } = render(<App />);
     expect(screen.getByRole("button", { name: "Start Solver" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Auto next: Off" })).toBeDisabled();
     expect(screen.getByText("4/5")).toBeInTheDocument();
     unmount();
 
@@ -244,6 +246,33 @@ describe("App", () => {
     seedAutoSolverProgress(5);
     render(<App />);
     expect(screen.getByRole("button", { name: "Start Solver" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Auto next: Off" })).toBeEnabled();
+    expect(screen.getByText("No solver puzzles.")).toBeInTheDocument();
     expect(screen.getByText("5/5")).toBeInTheDocument();
+  });
+
+  it("starts auto solver work on a mini solver lane", async () => {
+    seedAutoSolverProgress(5);
+    const user = userEvent.setup();
+    const postMessages: unknown[] = [];
+    class FakeWorker {
+      onmessage: ((event: MessageEvent<unknown>) => void) | null = null;
+      onerror: ((event: ErrorEvent) => void) | null = null;
+
+      postMessage(message: unknown): void {
+        postMessages.push(message);
+      }
+
+      terminate(): void {}
+    }
+    vi.stubGlobal("Worker", FakeWorker);
+
+    render(<App />);
+    await user.click(screen.getByRole("button", { name: "Start Solver" }));
+
+    expect(screen.getByTestId("solver-run")).toHaveTextContent("Tier 0");
+    expect(screen.getByRole("grid", { name: "Puzzle board" })).toBeInTheDocument();
+    expect(postMessages).toHaveLength(1);
+    expect(postMessages[0]).toMatchObject({ type: "START" });
   });
 });
