@@ -15,6 +15,7 @@ export function defaultSettings(): UserSettings {
     theme: "system",
     language: "en",
     tutorialCompleted: false,
+    hidePurchasedUpgrades: true,
   };
 }
 
@@ -108,6 +109,7 @@ export function validateSaveData(value: unknown): SaveDataV1 | null {
       theme: isTheme(settings.theme) ? settings.theme : defaults.theme,
       language: isLanguage(settings.language) ? settings.language : defaults.language,
       tutorialCompleted: typeof settings.tutorialCompleted === "boolean" ? settings.tutorialCompleted : defaults.tutorialCompleted,
+      hidePurchasedUpgrades: typeof settings.hidePurchasedUpgrades === "boolean" ? settings.hidePurchasedUpgrades : defaults.hidePurchasedUpgrades,
     },
   };
   return normalized;

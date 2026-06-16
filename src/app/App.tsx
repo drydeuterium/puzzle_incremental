@@ -66,6 +66,7 @@ type Action =
   | Readonly<{ type: "set-high-contrast"; value: boolean }>
   | Readonly<{ type: "set-theme"; value: SaveDataV1["settings"]["theme"] }>
   | Readonly<{ type: "set-language"; value: SaveDataV1["settings"]["language"] }>
+  | Readonly<{ type: "set-hide-purchased-upgrades"; value: boolean }>
   | Readonly<{ type: "set-tutorial-open"; value: boolean }>
   | Readonly<{ type: "complete-tutorial" }>
   | Readonly<{ type: "solver-started"; sessionId: SolverSessionId }>
@@ -128,6 +129,8 @@ const COPY = {
     level: "Level",
     next: "Next",
     buy: "Buy",
+    hidePurchased: "Hide purchased",
+    noVisibleUpgrades: "All purchased upgrades are hidden.",
     clear: "Clear",
     clearSummary: (classification: ClearClassification, reward: number) => `${classification} clear, +${reward}C.`,
     nextPuzzle: "Next Puzzle",
@@ -222,6 +225,8 @@ const COPY = {
     level: "Lv",
     next: "次",
     buy: "購入",
+    hidePurchased: "購入済み非表示",
+    noVisibleUpgrades: "購入済みアップグレードを非表示にしています。",
     clear: "クリア",
     clearSummary: (classification: ClearClassification, reward: number) => `${classification} クリア、+${reward}C。`,
     nextPuzzle: "次のパズル",
@@ -525,6 +530,8 @@ function reducer(state: AppState, action: Action): AppState {
       return { ...state, save: { ...state.save, settings: { ...state.save.settings, theme: action.value } } };
     case "set-language":
       return { ...state, save: { ...state.save, settings: { ...state.save.settings, language: action.value } } };
+    case "set-hide-purchased-upgrades":
+      return { ...state, save: { ...state.save, settings: { ...state.save.settings, hidePurchasedUpgrades: action.value } } };
     case "set-tutorial-open":
       return { ...state, tutorialOpen: action.value };
     case "complete-tutorial":
@@ -700,6 +707,10 @@ export function App() {
   }, [hoverCell, puzzle, selectedPiece, state.puzzle.board, state.rotations]);
   const language = state.save.settings.language ?? "en";
   const copy = COPY[language];
+  const visibleUpgrades = GAME_CONFIG.upgrades.filter((upgrade) => {
+    const level = state.save.progression.upgradeLevels[upgrade.id] ?? 0;
+    return !state.save.settings.hidePurchasedUpgrades || level < upgrade.maxLevel;
+  });
 
   const handleWorkerMessage = useCallback((message: WorkerResponse) => {
     if (message.type === "STARTED") {
@@ -791,6 +802,20 @@ export function App() {
     }
     const seed = daily ? dailySeed(state.save.progression.selectedTier) : `seed-${state.save.progression.selectedTier}-${Date.now()}`;
     dispatch({ type: "new-puzzle", puzzle: generatePuzzle({ tier: state.save.progression.selectedTier, seed }) });
+  };
+
+  const switchTier = (tier: number, timestamp: number) => {
+    if (!isTierUnlocked(state.save.progression.upgradeLevels, tier)) {
+      return;
+    }
+    if (state.save.progression.selectedTier === tier && puzzle.tier === tier) {
+      return;
+    }
+    if (boardPlacements(state.puzzle.board).length > 0 && !state.puzzle.cleared && !window.confirm(copy.discardCurrentPuzzle)) {
+      return;
+    }
+    dispatch({ type: "set-tier", tier });
+    dispatch({ type: "new-puzzle", puzzle: generatePuzzle({ tier, seed: `tier-${tier}-${timestamp}` }) });
   };
 
   const useContradictionDetector = () => {
@@ -923,11 +948,26 @@ export function App() {
         </aside>
 
         <section className="board-panel">
-          <div className="board-header">
-            <span>{copy.tier} {puzzle.tier}</span>
-            <button type="button" onClick={() => navigator.clipboard?.writeText(puzzle.seed)}>{copy.seed}: {puzzle.seed}</button>
-            <span>{copy.difficulty} {puzzle.difficulty.score}</span>
-            <span>{state.puzzle.classification}</span>
+          <div className="board-top">
+            <div className="board-header">
+              <span>{copy.tier} {puzzle.tier}</span>
+              <button type="button" onClick={() => navigator.clipboard?.writeText(puzzle.seed)}>{copy.seed}: {puzzle.seed}</button>
+              <span>{copy.difficulty} {puzzle.difficulty.score}</span>
+              <span>{state.puzzle.classification}</span>
+            </div>
+            <div className="tier-switcher" aria-label={copy.tierSelection}>
+              {GAME_CONFIG.tiers.map((tier) => (
+                <button
+                  key={tier.id}
+                  type="button"
+                  disabled={!isTierUnlocked(state.save.progression.upgradeLevels, tier.id)}
+                  className={state.save.progression.selectedTier === tier.id ? "selected" : ""}
+                  onClick={() => switchTier(tier.id, Date.now())}
+                >
+                  {copy.tier} {tier.id}
+                </button>
+              ))}
+            </div>
           </div>
           <div
             className="board"
@@ -961,57 +1001,65 @@ export function App() {
           </div>
         </section>
 
-        <aside className="panel">
-          <h2>{copy.solver}</h2>
-          <div className="solver-grid">
-            <span>{copy.status}</span><strong data-testid="solver-status">{state.solver.status}</strong>
-            <span>{copy.nodes}</span><strong>{formatNumber(state.solver.stats?.nodes ?? 0, language)}</strong>
-            <span>{copy.backtracks}</span><strong>{formatNumber(state.solver.stats?.backtracks ?? 0, language)}</strong>
-            <span>{copy.theoryNodesPerSecond}</span><strong>{formatNumber(nodesPerSecond(state.save.progression.upgradeLevels), language)}</strong>
-            <span>{copy.depth}</span><strong>{state.solver.stats?.currentDepth ?? 0}</strong>
-            <span>{copy.queue}</span><strong>{state.solver.queue.length}/{queueCapacity(state.save.progression.upgradeLevels)}</strong>
-            <span>{copy.parallel}</span><strong>{parallelSessions(state.save.progression.upgradeLevels)}</strong>
-          </div>
-          <div className="controls">
-            <button type="button" onClick={startSolver} disabled={(state.save.progression.upgradeLevels["auto-solver"] ?? 0) <= 0 || state.solver.status === "running"} title={copy.requiresAutoSolver}>{copy.startSolver}</button>
-            <button type="button" onClick={pauseOrResumeSolver} disabled={!state.solver.sessionId}>{state.solver.status === "paused" ? copy.resume : copy.pause}</button>
-            <button type="button" onClick={cancelSolver} disabled={!state.solver.sessionId}>{copy.cancel}</button>
+        <aside className="panel side-panel">
+          <section className="solver-section">
+            <h2>{copy.solver}</h2>
+            <div className="solver-grid">
+              <span>{copy.status}</span><strong data-testid="solver-status">{state.solver.status}</strong>
+              <span>{copy.nodes}</span><strong>{formatNumber(state.solver.stats?.nodes ?? 0, language)}</strong>
+              <span>{copy.backtracks}</span><strong>{formatNumber(state.solver.stats?.backtracks ?? 0, language)}</strong>
+              <span>{copy.theoryNodesPerSecond}</span><strong>{formatNumber(nodesPerSecond(state.save.progression.upgradeLevels), language)}</strong>
+              <span>{copy.depth}</span><strong>{state.solver.stats?.currentDepth ?? 0}</strong>
+              <span>{copy.queue}</span><strong>{state.solver.queue.length}/{queueCapacity(state.save.progression.upgradeLevels)}</strong>
+              <span>{copy.parallel}</span><strong>{parallelSessions(state.save.progression.upgradeLevels)}</strong>
+            </div>
+            <div className="controls solver-controls">
+              <button type="button" onClick={startSolver} disabled={(state.save.progression.upgradeLevels["auto-solver"] ?? 0) <= 0 || state.solver.status === "running"} title={copy.requiresAutoSolver}>{copy.startSolver}</button>
+              <button type="button" onClick={pauseOrResumeSolver} disabled={!state.solver.sessionId}>{state.solver.status === "paused" ? copy.resume : copy.pause}</button>
+              <button type="button" onClick={cancelSolver} disabled={!state.solver.sessionId}>{copy.cancel}</button>
+              <button
+                type="button"
+                disabled={queueCapacity(state.save.progression.upgradeLevels) <= state.solver.queue.length}
+                onClick={() => dispatch({ type: "enqueue", puzzle: generatePuzzle({ tier: state.save.progression.selectedTier, seed: `auto-${Date.now()}` }) })}
+              >
+                {copy.enqueue}
+              </button>
+              <button type="button" onClick={startQueue} disabled={state.solver.queue.length === 0 || (state.save.progression.upgradeLevels["auto-solver"] ?? 0) <= 0}>{copy.startQueue}</button>
+            </div>
+          </section>
+
+          <section className="upgrade-section">
+            <div className="panel-heading-row">
+              <h2>{copy.upgrades}</h2>
+              <span>{formatNumber(state.save.economy.compute, language)} C</span>
+            </div>
             <button
               type="button"
-              disabled={queueCapacity(state.save.progression.upgradeLevels) <= state.solver.queue.length}
-              onClick={() => dispatch({ type: "enqueue", puzzle: generatePuzzle({ tier: state.save.progression.selectedTier, seed: `auto-${Date.now()}` }) })}
+              className={`toggle-button ${state.save.settings.hidePurchasedUpgrades ? "selected" : ""}`}
+              onClick={() => dispatch({ type: "set-hide-purchased-upgrades", value: !state.save.settings.hidePurchasedUpgrades })}
             >
-              {copy.enqueue}
+              {copy.hidePurchased}: {state.save.settings.hidePurchasedUpgrades ? copy.on : copy.off}
             </button>
-            <button type="button" onClick={startQueue} disabled={state.solver.queue.length === 0 || (state.save.progression.upgradeLevels["auto-solver"] ?? 0) <= 0}>{copy.startQueue}</button>
-          </div>
-
-          <h2>{copy.upgrades}</h2>
-          <div className="upgrade-list">
-            {GAME_CONFIG.upgrades.map((upgrade) => {
-              const level = state.save.progression.upgradeLevels[upgrade.id] ?? 0;
-              const outcome = canPurchaseUpgrade(state.save.progression.upgradeLevels, state.save.economy.compute, upgrade.id);
-              return (
-                <article className="upgrade" key={upgrade.id}>
-                  <div>
-                    <strong>{upgrade.name}</strong>
-                    <span>{copy.level} {level}/{upgrade.maxLevel}</span>
-                  </div>
-                  <p>{outcome.ok ? `${copy.next}: ${outcome.price}C` : `${getUpgradePrice(upgrade.id, level)}C, ${outcome.reason}`}</p>
-                  <button type="button" onClick={() => dispatch({ type: "purchase", upgradeId: upgrade.id })} disabled={!outcome.ok}>{copy.buy}</button>
-                </article>
-              );
-            })}
-          </div>
+            <div className="upgrade-list">
+              {visibleUpgrades.length === 0 && <p className="empty-state">{copy.noVisibleUpgrades}</p>}
+              {visibleUpgrades.map((upgrade) => {
+                const level = state.save.progression.upgradeLevels[upgrade.id] ?? 0;
+                const outcome = canPurchaseUpgrade(state.save.progression.upgradeLevels, state.save.economy.compute, upgrade.id);
+                const price = getUpgradePrice(upgrade.id, level);
+                return (
+                  <article className={`upgrade ${level >= upgrade.maxLevel ? "owned" : ""}`} key={upgrade.id}>
+                    <div className="upgrade-header">
+                      <strong>{upgrade.name}</strong>
+                      <span>{copy.level} {level}/{upgrade.maxLevel}</span>
+                    </div>
+                    <p>{outcome.ok ? `${copy.next}: ${outcome.price}C` : `${price}C, ${outcome.reason}`}</p>
+                    <button type="button" onClick={() => dispatch({ type: "purchase", upgradeId: upgrade.id })} disabled={!outcome.ok}>{copy.buy}</button>
+                  </article>
+                );
+              })}
+            </div>
+          </section>
         </aside>
-      </section>
-
-      <section className="tier-row" aria-label={copy.tierSelection}>
-        {GAME_CONFIG.tiers.map((tier) => (
-          <button key={tier.id} type="button" disabled={!isTierUnlocked(state.save.progression.upgradeLevels, tier.id)} className={state.save.progression.selectedTier === tier.id ? "selected" : ""} onClick={() => dispatch({ type: "set-tier", tier: tier.id })}>
-            {copy.tier} {tier.id}
-          </button>
-        ))}
       </section>
 
       {state.clearResult && (

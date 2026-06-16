@@ -117,6 +117,7 @@ export type UserSettings = Readonly<{
   theme: "system" | "light" | "dark";
   language: "en" | "ja";
   tutorialCompleted: boolean;
+  hidePurchasedUpgrades: boolean;
 }>;
 
 export type Statistics = Readonly<{

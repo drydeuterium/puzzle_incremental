@@ -35,6 +35,24 @@ function seedKeyboardRotationPuzzle(): void {
   window.localStorage.setItem(BACKUP_SAVE_KEY, JSON.stringify(save));
 }
 
+function seedPurchasedUpgrade(): void {
+  const now = new Date("2026-01-01T00:00:00.000Z");
+  const base = createInitialSave(now);
+  const save = {
+    ...base,
+    settings: { ...base.settings, tutorialCompleted: true },
+    progression: {
+      ...base.progression,
+      upgradeLevels: {
+        ...base.progression.upgradeLevels,
+        "placement-scanner": 1,
+      },
+    },
+  };
+  window.localStorage.setItem(SAVE_KEY, JSON.stringify(save));
+  window.localStorage.setItem(BACKUP_SAVE_KEY, JSON.stringify(save));
+}
+
 describe("App", () => {
   beforeEach(() => {
     window.localStorage.clear();
@@ -98,5 +116,15 @@ describe("App", () => {
     await user.selectOptions(screen.getByLabelText("Language"), "ja");
     expect(screen.getByRole("heading", { name: "設定" })).toBeInTheDocument();
     expect(screen.getByLabelText("言語")).toHaveValue("ja");
+  });
+
+  it("hides purchased upgrades by default and can show them", async () => {
+    seedPurchasedUpgrade();
+    const user = userEvent.setup();
+    render(<App />);
+
+    expect(screen.queryByText("Placement Scanner")).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Hide purchased: On" }));
+    expect(screen.getByText("Placement Scanner")).toBeInTheDocument();
   });
 });

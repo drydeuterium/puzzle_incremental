@@ -2,10 +2,20 @@
   box-sizing: border-box;
 }
 
+html,
+#root {
+  height: 100%;
+}
+
+html {
+  overflow: hidden;
+}
+
 body {
   margin: 0;
   min-width: 320px;
-  min-height: 100vh;
+  height: 100%;
+  overflow: hidden;
   background: var(--bg);
   color: var(--text);
   font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
@@ -43,15 +53,18 @@ button:disabled {
 }
 
 .app {
-  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
 }
 
 .topbar {
-  position: sticky;
-  top: 0;
   z-index: 5;
   display: grid;
   grid-template-columns: minmax(180px, 1fr) auto auto auto auto auto;
+  flex: 0 0 auto;
   gap: 12px;
   align-items: center;
   padding: 12px 18px;
@@ -79,14 +92,24 @@ button:disabled {
 
 .layout {
   display: grid;
-  grid-template-columns: minmax(220px, 280px) minmax(320px, 1fr) minmax(260px, 340px);
-  gap: 16px;
-  padding: 16px;
+  grid-template-columns: minmax(220px, 280px) minmax(360px, 1fr) minmax(300px, 360px);
+  flex: 1 1 auto;
+  gap: 12px;
+  min-height: 0;
+  overflow: hidden;
+  padding: 12px;
 }
 
 .panel,
 .board-panel {
   min-width: 0;
+  min-height: 0;
+}
+
+.layout > .panel:first-child {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  overflow: hidden;
 }
 
 .panel h2,
@@ -102,17 +125,24 @@ button:disabled {
   gap: 8px;
 }
 
+.piece-tray {
+  min-height: 0;
+  overflow: auto;
+  padding-right: 4px;
+}
+
 .piece-card {
   display: grid;
   grid-template-columns: 1fr auto;
   gap: 3px 8px;
-  min-height: 58px;
-  padding: 8px;
+  min-height: 50px;
+  padding: 7px;
   text-align: left;
 }
 
 .piece-card.selected,
-.tier-row .selected {
+.tier-switcher .selected,
+.toggle-button.selected {
   border-color: var(--accent);
   box-shadow: inset 0 0 0 2px var(--accent);
 }
@@ -122,20 +152,43 @@ button:disabled {
   margin-top: 12px;
 }
 
+.board-panel {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  overflow: hidden;
+}
+
+.board-top {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
 .board-header {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 10px;
   color: var(--muted);
 }
 
+.tier-switcher {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.tier-switcher button {
+  min-height: 32px;
+  padding: 4px 6px;
+}
+
 .board {
+  align-self: start;
   display: grid;
   gap: 4px;
-  width: min(100%, 620px);
+  width: min(100%, 620px, calc(100vh - 220px));
   margin: 0 auto;
 }
 
@@ -182,16 +235,70 @@ button:disabled {
   background: var(--surface);
 }
 
+.side-panel {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: 12px;
+  overflow: hidden;
+}
+
+.solver-section {
+  min-height: 0;
+}
+
+.solver-controls {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.upgrade-section {
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr);
+  gap: 8px;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.panel-heading-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.panel-heading-row h2 {
+  margin: 0;
+}
+
+.panel-heading-row span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.toggle-button {
+  min-height: 32px;
+}
+
+.upgrade-list {
+  min-height: 0;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
 .upgrade {
   display: grid;
-  gap: 6px;
-  padding: 10px;
+  gap: 5px;
+  padding: 8px;
   border: 1px solid var(--line);
   border-radius: 6px;
   background: var(--surface);
 }
 
-.upgrade div {
+.upgrade.owned {
+  background: var(--surface-2);
+}
+
+.upgrade-header {
   display: flex;
   justify-content: space-between;
   gap: 8px;
@@ -200,18 +307,25 @@ button:disabled {
 .upgrade p {
   margin: 0;
   color: var(--muted);
-  font-size: 13px;
+  font-size: 12px;
 }
 
-.tier-row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  padding: 0 16px 16px;
+.upgrade button {
+  min-height: 30px;
+}
+
+.empty-state {
+  margin: 0;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  color: var(--muted);
+  background: var(--surface);
 }
 
 .toast,
 .warning {
+  flex: 0 0 auto;
   margin: 10px 16px 0;
   padding: 10px 12px;
   border: 1px solid var(--line);
@@ -282,15 +396,35 @@ button:disabled {
 }
 
 @media (max-width: 900px) {
+  html,
+  body {
+    height: auto;
+    overflow: auto;
+  }
+
+  .app {
+    height: auto;
+    min-height: 100vh;
+    overflow: visible;
+  }
+
   .topbar {
     grid-template-columns: 1fr 1fr;
   }
 
   .layout {
     grid-template-columns: 1fr;
+    overflow: visible;
   }
 
   .board {
     width: 100%;
+  }
+
+  .side-panel,
+  .upgrade-section,
+  .upgrade-list,
+  .piece-tray {
+    overflow: visible;
   }
 }

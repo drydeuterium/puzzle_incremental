@@ -40,5 +40,6 @@ describe("save repository", () => {
     const loaded = loadSave(storage);
     expect(loaded.save.settings.language).toBe("en");
     expect(loaded.save.settings.tutorialCompleted).toBe(false);
+    expect(loaded.save.settings.hidePurchasedUpgrades).toBe(true);
   });
 });
