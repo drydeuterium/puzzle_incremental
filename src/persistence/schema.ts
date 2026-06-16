@@ -13,6 +13,8 @@ export function defaultSettings(): UserSettings {
     animationSpeed: 1,
     highContrast: false,
     theme: "system",
+    language: "en",
+    tutorialCompleted: false,
   };
 }
 
@@ -64,6 +66,18 @@ function isSafeNonNegativeInteger(value: unknown): value is number {
   return typeof value === "number" && Number.isSafeInteger(value) && value >= 0;
 }
 
+function isVisualization(value: unknown): value is UserSettings["visualization"] {
+  return value === "on" || value === "reduced" || value === "off";
+}
+
+function isTheme(value: unknown): value is UserSettings["theme"] {
+  return value === "system" || value === "light" || value === "dark";
+}
+
+function isLanguage(value: unknown): value is UserSettings["language"] {
+  return value === "en" || value === "ja";
+}
+
 export function validateSaveData(value: unknown): SaveDataV1 | null {
   if (!isRecord(value) || value.schemaVersion !== 1) {
     return null;
@@ -84,5 +98,17 @@ export function validateSaveData(value: unknown): SaveDataV1 | null {
   if (!isRecord(settings)) {
     return null;
   }
-  return value as SaveDataV1;
+  const defaults = defaultSettings();
+  const normalized: SaveDataV1 = {
+    ...(value as SaveDataV1),
+    settings: {
+      visualization: isVisualization(settings.visualization) ? settings.visualization : defaults.visualization,
+      animationSpeed: typeof settings.animationSpeed === "number" ? settings.animationSpeed : defaults.animationSpeed,
+      highContrast: typeof settings.highContrast === "boolean" ? settings.highContrast : defaults.highContrast,
+      theme: isTheme(settings.theme) ? settings.theme : defaults.theme,
+      language: isLanguage(settings.language) ? settings.language : defaults.language,
+      tutorialCompleted: typeof settings.tutorialCompleted === "boolean" ? settings.tutorialCompleted : defaults.tutorialCompleted,
+    },
+  };
+  return normalized;
 }

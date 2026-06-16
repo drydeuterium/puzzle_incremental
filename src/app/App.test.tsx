@@ -10,6 +10,7 @@ function seedKeyboardRotationPuzzle(): void {
   const base = createInitialSave(now);
   const save = {
     ...base,
+    settings: { ...base.settings, tutorialCompleted: true },
     currentPuzzle: {
       definition: {
         id: "keyboard-rotation-fixture",
@@ -41,6 +42,7 @@ describe("App", () => {
 
   it("renders compute, board, pieces, and locked upgrade reasons", () => {
     render(<App />);
+    expect(screen.getByRole("heading", { name: "Quick start" })).toBeInTheDocument();
     expect(screen.getByTestId("compute")).toHaveTextContent("0 C");
     expect(screen.getByRole("grid", { name: "Puzzle board" })).toBeInTheDocument();
     expect(screen.getAllByText(/Ready|Placed/).length).toBeGreaterThan(0);
@@ -50,6 +52,7 @@ describe("App", () => {
   it("selects and rotates a piece", async () => {
     const user = userEvent.setup();
     render(<App />);
+    await user.click(screen.getByRole("button", { name: "Start Playing" }));
     await user.click(screen.getByTestId("piece-p0"));
     await user.click(screen.getByText("Rotate Right"));
     expect(screen.getByTestId("piece-p0")).toHaveTextContent("rot");
@@ -80,9 +83,20 @@ describe("App", () => {
   it("shows theme settings", async () => {
     const user = userEvent.setup();
     render(<App />);
+    await user.click(screen.getByRole("button", { name: "Start Playing" }));
     await user.click(screen.getByText("Settings"));
     expect(screen.getByLabelText("Theme")).toHaveValue("system");
     await user.selectOptions(screen.getByLabelText("Theme"), "dark");
     expect(screen.getByLabelText("Theme")).toHaveValue("dark");
+  });
+
+  it("switches visible settings copy to Japanese", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    await user.click(screen.getByRole("button", { name: "Start Playing" }));
+    await user.click(screen.getByText("Settings"));
+    await user.selectOptions(screen.getByLabelText("Language"), "ja");
+    expect(screen.getByRole("heading", { name: "設定" })).toBeInTheDocument();
+    expect(screen.getByLabelText("言語")).toHaveValue("ja");
   });
 });

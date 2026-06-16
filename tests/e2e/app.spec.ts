@@ -78,7 +78,7 @@ test("fresh start manual clear", async ({ page }) => {
         startedAt: now,
         lastSavedAt: now,
       },
-      settings: { visualization: "on", animationSpeed: 1, highContrast: false, theme: "system" },
+      settings: { visualization: "on", animationSpeed: 1, highContrast: false, theme: "system", language: "en", tutorialCompleted: true },
     };
     localStorage.setItem("puzzle_incremental.save.v1", JSON.stringify(save));
     localStorage.setItem("puzzle_incremental.save.backup", JSON.stringify(save));
@@ -94,12 +94,15 @@ test("fresh start manual clear", async ({ page }) => {
 });
 
 test("settings and persistence shell work", async ({ page }) => {
+  await page.getByRole("button", { name: "Start Playing" }).click();
   await page.getByText("Settings").click();
   await page.getByLabel("Visualization").selectOption("off");
   await page.getByLabel("Theme").selectOption("dark");
-  await page.getByText("Close").click();
+  await page.getByLabel("Language").selectOption("ja");
+  await page.getByText("閉じる").click();
   await page.reload();
-  await page.getByText("Settings").click();
-  await expect(page.getByLabel("Visualization")).toHaveValue("off");
-  await expect(page.getByLabel("Theme")).toHaveValue("dark");
+  await page.getByText("設定").click();
+  await expect(page.getByLabel("可視化")).toHaveValue("off");
+  await expect(page.getByLabel("テーマ")).toHaveValue("dark");
+  await expect(page.getByLabel("言語")).toHaveValue("ja");
 });

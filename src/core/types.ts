@@ -115,6 +115,8 @@ export type UserSettings = Readonly<{
   animationSpeed: number;
   highContrast: boolean;
   theme: "system" | "light" | "dark";
+  language: "en" | "ja";
+  tutorialCompleted: boolean;
 }>;
 
 export type Statistics = Readonly<{

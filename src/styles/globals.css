@@ -51,7 +51,7 @@ button:disabled {
   top: 0;
   z-index: 5;
   display: grid;
-  grid-template-columns: minmax(180px, 1fr) auto auto auto auto;
+  grid-template-columns: minmax(180px, 1fr) auto auto auto auto auto;
   gap: 12px;
   align-items: center;
   padding: 12px 18px;
@@ -257,6 +257,28 @@ button:disabled {
 
 .file-button input {
   display: block;
+}
+
+.tutorial-body {
+  width: min(560px, 100%);
+}
+
+.tutorial-list {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding-left: 22px;
+}
+
+.tutorial-list li {
+  line-height: 1.45;
+}
+
+.modal-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: end;
 }
 
 @media (max-width: 900px) {

@@ -42,6 +42,7 @@ type AppState = Readonly<{
   clearResult: Readonly<{ reward: number; classification: ClearClassification }> | null;
   settingsOpen: boolean;
   statsOpen: boolean;
+  tutorialOpen: boolean;
   solver: SolverUiState;
 }>;
 
@@ -64,6 +65,9 @@ type Action =
   | Readonly<{ type: "set-visualization"; value: SaveDataV1["settings"]["visualization"] }>
   | Readonly<{ type: "set-high-contrast"; value: boolean }>
   | Readonly<{ type: "set-theme"; value: SaveDataV1["settings"]["theme"] }>
+  | Readonly<{ type: "set-language"; value: SaveDataV1["settings"]["language"] }>
+  | Readonly<{ type: "set-tutorial-open"; value: boolean }>
+  | Readonly<{ type: "complete-tutorial" }>
   | Readonly<{ type: "solver-started"; sessionId: SolverSessionId }>
   | Readonly<{ type: "solver-progress"; sessionId: SolverSessionId; stats: SolverStats; preview?: readonly Placement[] }>
   | Readonly<{ type: "solver-solved"; sessionId: SolverSessionId; stats: SolverStats; solution: readonly Placement[] }>
@@ -78,6 +82,197 @@ type Action =
   | Readonly<{ type: "import"; save: SaveDataV1 }>
   | Readonly<{ type: "erase"; save: SaveDataV1 }>
   | Readonly<{ type: "toast"; message: string | null }>;
+
+const COPY = {
+  en: {
+    compute: "Compute",
+    nodesPerSecond: "nodes/s",
+    settings: "Settings",
+    stats: "Stats",
+    tutorial: "Tutorial",
+    pieces: "Pieces",
+    ready: "Ready",
+    placed: "Placed",
+    rotation: "rot",
+    newPuzzle: "New Puzzle",
+    dailySeed: "Daily Seed",
+    resetBoard: "Reset Board",
+    undo: "Undo",
+    redo: "Redo",
+    rotateLeft: "Rotate Left",
+    rotateRight: "Rotate Right",
+    removePiece: "Remove Piece",
+    hint: "Hint",
+    check: "Check",
+    forcedMove: "Forced Move",
+    boardLabel: "Puzzle board",
+    tierSelection: "Tier selection",
+    tier: "Tier",
+    seed: "seed",
+    difficulty: "difficulty",
+    solver: "Solver",
+    status: "Status",
+    nodes: "Nodes",
+    backtracks: "Backtracks",
+    theoryNodesPerSecond: "Theory nodes/s",
+    depth: "Depth",
+    queue: "Queue",
+    parallel: "Parallel",
+    startSolver: "Start Solver",
+    pause: "Pause",
+    resume: "Resume",
+    cancel: "Cancel",
+    enqueue: "Enqueue",
+    startQueue: "Start Queue",
+    upgrades: "Upgrades",
+    level: "Level",
+    next: "Next",
+    buy: "Buy",
+    clear: "Clear",
+    clearSummary: (classification: ClearClassification, reward: number) => `${classification} clear, +${reward}C.`,
+    nextPuzzle: "Next Puzzle",
+    close: "Close",
+    theme: "Theme",
+    system: "System",
+    light: "Light",
+    dark: "Dark",
+    language: "Language",
+    english: "English",
+    japanese: "Japanese",
+    visualization: "Visualization",
+    on: "On",
+    reduced: "Reduced",
+    off: "Off",
+    highContrast: "High contrast",
+    exportSave: "Export Save",
+    importSave: "Import Save",
+    eraseSave: "Erase Save",
+    erasePlaceholder: "Type ERASE",
+    version: "Version",
+    openTutorial: "Open Tutorial",
+    totalClears: "Total clears",
+    lifetimeSolverNodes: "Lifetime solver nodes",
+    maximumDifficulty: "Maximum difficulty",
+    tutorialTitle: "Quick start",
+    tutorialIntro: "Fill every usable cell exactly once with the available tetromino pieces.",
+    tutorialSteps: [
+      "Select a piece from the left panel, then click a board cell to place it.",
+      "Rotate the selected piece with the buttons, A/D, or the left/right arrow keys.",
+      "Placed pieces can be selected on the board, moved by placing them again, or removed.",
+      "Clears award Compute. Manual clears pay more; hints and automation lower the classification.",
+      "Spend Compute on upgrades to unlock higher tiers, hints, queues, and the Auto Solver.",
+    ],
+    startPlaying: "Start Playing",
+    later: "Later",
+    requiresPlacementScanner: "Requires Placement Scanner",
+    requiresContradictionDetector: "Requires Contradiction Detector",
+    requiresForcedMove: "Requires Forced Move",
+    requiresAutoSolver: "Requires Auto Solver",
+    autoSolverLocked: "Auto Solver is locked.",
+    queueEmpty: "Queue is empty.",
+    discardCurrentPuzzle: "Discard current puzzle?",
+    contradictionLocked: "Contradiction Detector is locked.",
+    contradictionFound: "This position cannot be completed.",
+    contradictionClear: "No contradiction found.",
+    noLegalPlacement: "No legal placement covers that cell.",
+    invalidSave: "Invalid save file.",
+    importFailed: "Import failed.",
+  },
+  ja: {
+    compute: "Compute",
+    nodesPerSecond: "nodes/s",
+    settings: "設定",
+    stats: "統計",
+    tutorial: "チュートリアル",
+    pieces: "ピース",
+    ready: "未配置",
+    placed: "配置済み",
+    rotation: "回転",
+    newPuzzle: "新規パズル",
+    dailySeed: "今日のシード",
+    resetBoard: "盤面リセット",
+    undo: "元に戻す",
+    redo: "やり直す",
+    rotateLeft: "左回転",
+    rotateRight: "右回転",
+    removePiece: "ピースを外す",
+    hint: "ヒント",
+    check: "検査",
+    forcedMove: "強制手",
+    boardLabel: "パズル盤面",
+    tierSelection: "Tier 選択",
+    tier: "Tier",
+    seed: "シード",
+    difficulty: "難易度",
+    solver: "ソルバー",
+    status: "状態",
+    nodes: "ノード",
+    backtracks: "バックトラック",
+    theoryNodesPerSecond: "理論 nodes/s",
+    depth: "深さ",
+    queue: "キュー",
+    parallel: "並列",
+    startSolver: "ソルバー開始",
+    pause: "一時停止",
+    resume: "再開",
+    cancel: "キャンセル",
+    enqueue: "キュー追加",
+    startQueue: "キュー開始",
+    upgrades: "アップグレード",
+    level: "Lv",
+    next: "次",
+    buy: "購入",
+    clear: "クリア",
+    clearSummary: (classification: ClearClassification, reward: number) => `${classification} クリア、+${reward}C。`,
+    nextPuzzle: "次のパズル",
+    close: "閉じる",
+    theme: "テーマ",
+    system: "システム",
+    light: "ライト",
+    dark: "ダーク",
+    language: "言語",
+    english: "英語",
+    japanese: "日本語",
+    visualization: "可視化",
+    on: "オン",
+    reduced: "軽量",
+    off: "オフ",
+    highContrast: "高コントラスト",
+    exportSave: "セーブ出力",
+    importSave: "セーブ読込",
+    eraseSave: "セーブ削除",
+    erasePlaceholder: "ERASE と入力",
+    version: "バージョン",
+    openTutorial: "チュートリアルを開く",
+    totalClears: "総クリア数",
+    lifetimeSolverNodes: "累計ソルバーノード",
+    maximumDifficulty: "最大難易度",
+    tutorialTitle: "はじめ方",
+    tutorialIntro: "使えるセルを、用意されたテトロミノですべて一度ずつ埋めます。",
+    tutorialSteps: [
+      "左のパネルからピースを選び、盤面のセルをクリックして配置します。",
+      "選択中のピースはボタン、A/D、左右矢印キーで回転できます。",
+      "配置済みピースは盤面上で選択し、置き直したり外したりできます。",
+      "クリアすると Compute を獲得します。手動クリアほど報酬が高く、ヒントや自動化を使うと分類が下がります。",
+      "Compute を使って、高い Tier、ヒント、キュー、Auto Solver を解放します。",
+    ],
+    startPlaying: "始める",
+    later: "あとで",
+    requiresPlacementScanner: "Placement Scanner が必要",
+    requiresContradictionDetector: "Contradiction Detector が必要",
+    requiresForcedMove: "Forced Move が必要",
+    requiresAutoSolver: "Auto Solver が必要",
+    autoSolverLocked: "Auto Solver は未解放です。",
+    queueEmpty: "キューが空です。",
+    discardCurrentPuzzle: "現在のパズルを破棄しますか?",
+    contradictionLocked: "Contradiction Detector は未解放です。",
+    contradictionFound: "この局面は完成できません。",
+    contradictionClear: "矛盾は見つかりませんでした。",
+    noLegalPlacement: "そのセルを覆える合法配置がありません。",
+    invalidSave: "セーブファイルが不正です。",
+    importFailed: "読み込みに失敗しました。",
+  },
+} as const;
 
 function puzzleFromSave(save: SaveDataV1): RuntimePuzzle {
   if (save.currentPuzzle && save.currentPuzzle.definition.generatorVersion === GAME_CONFIG.generatorVersion) {
@@ -130,6 +325,7 @@ function createInitialState(): AppState {
     clearResult: null,
     settingsOpen: false,
     statsOpen: false,
+    tutorialOpen: !save.settings.tutorialCompleted,
     solver: {
       status: "idle",
       sessionId: null,
@@ -327,6 +523,12 @@ function reducer(state: AppState, action: Action): AppState {
       return { ...state, save: { ...state.save, settings: { ...state.save.settings, highContrast: action.value } } };
     case "set-theme":
       return { ...state, save: { ...state.save, settings: { ...state.save.settings, theme: action.value } } };
+    case "set-language":
+      return { ...state, save: { ...state.save, settings: { ...state.save.settings, language: action.value } } };
+    case "set-tutorial-open":
+      return { ...state, tutorialOpen: action.value };
+    case "complete-tutorial":
+      return { ...state, tutorialOpen: false, save: { ...state.save, settings: { ...state.save.settings, tutorialCompleted: true } } };
     case "solver-started":
       return withSavedPuzzle({ ...state, puzzle: classifyAutomated(state) }, { solver: { ...state.solver, status: "running", sessionId: action.sessionId, activeSessions: 1 }, toast: "Auto Solver started." });
     case "solver-progress":
@@ -397,9 +599,9 @@ function reducer(state: AppState, action: Action): AppState {
     case "solver-queue-unsat":
       return { ...state, solver: { ...state.solver, stats: action.stats, activeSessions: Math.max(0, state.solver.activeSessions - 1) }, toast: "Queued puzzle failed." };
     case "import":
-      return { ...createInitialState(), save: action.save, puzzle: puzzleFromSave(action.save), toast: "Save imported." };
+      return { ...createInitialState(), save: action.save, puzzle: puzzleFromSave(action.save), tutorialOpen: !action.save.settings.tutorialCompleted, toast: "Save imported." };
     case "erase":
-      return { ...createInitialState(), save: action.save, puzzle: puzzleFromSave(action.save), toast: "Save erased." };
+      return { ...createInitialState(), save: action.save, puzzle: puzzleFromSave(action.save), tutorialOpen: !action.save.settings.tutorialCompleted, toast: "Save erased." };
     case "toast":
       return { ...state, toast: action.message };
     default:
@@ -407,8 +609,8 @@ function reducer(state: AppState, action: Action): AppState {
   }
 }
 
-function formatNumber(value: number): string {
-  return new Intl.NumberFormat("en-US").format(value);
+function formatNumber(value: number, language: SaveDataV1["settings"]["language"]): string {
+  return new Intl.NumberFormat(language === "ja" ? "ja-JP" : "en-US").format(value);
 }
 
 function findForcedMove(puzzle: PuzzleDefinition, board: BoardState): Placement | null {
@@ -496,6 +698,8 @@ export function App() {
     }
     return choosePlacementForCell(puzzle, state.puzzle.board, selectedPiece, state.rotations[selectedPiece.id] ?? 0, hoverCell);
   }, [hoverCell, puzzle, selectedPiece, state.puzzle.board, state.rotations]);
+  const language = state.save.settings.language ?? "en";
+  const copy = COPY[language];
 
   const handleWorkerMessage = useCallback((message: WorkerResponse) => {
     if (message.type === "STARTED") {
@@ -535,7 +739,7 @@ export function App() {
 
   const startSolver = () => {
     if ((state.save.progression.upgradeLevels["auto-solver"] ?? 0) <= 0) {
-      dispatch({ type: "toast", message: "Auto Solver is locked." });
+      dispatch({ type: "toast", message: copy.autoSolverLocked });
       return;
     }
     const sessionId = `session-${Date.now()}`;
@@ -563,13 +767,13 @@ export function App() {
 
   const startQueue = () => {
     if ((state.save.progression.upgradeLevels["auto-solver"] ?? 0) <= 0) {
-      dispatch({ type: "toast", message: "Auto Solver is locked." });
+      dispatch({ type: "toast", message: copy.autoSolverLocked });
       return;
     }
     const available = Math.max(0, parallelSessions(state.save.progression.upgradeLevels) - state.solver.activeSessions);
     const queued = state.solver.queue.slice(0, available);
     if (queued.length === 0) {
-      dispatch({ type: "toast", message: "Queue is empty." });
+      dispatch({ type: "toast", message: copy.queueEmpty });
       return;
     }
     const worker = ensureWorker();
@@ -582,7 +786,7 @@ export function App() {
   };
 
   const startNewPuzzle = (daily: boolean) => {
-    if (boardPlacements(state.puzzle.board).length > 0 && !state.puzzle.cleared && !window.confirm("Discard current puzzle?")) {
+    if (boardPlacements(state.puzzle.board).length > 0 && !state.puzzle.cleared && !window.confirm(copy.discardCurrentPuzzle)) {
       return;
     }
     const seed = daily ? dailySeed(state.save.progression.selectedTier) : `seed-${state.save.progression.selectedTier}-${Date.now()}`;
@@ -591,11 +795,11 @@ export function App() {
 
   const useContradictionDetector = () => {
     if ((state.save.progression.upgradeLevels["contradiction-detector"] ?? 0) <= 0) {
-      dispatch({ type: "toast", message: "Contradiction Detector is locked." });
+      dispatch({ type: "toast", message: copy.contradictionLocked });
       return;
     }
     const result = solveToEnd(puzzle, solverOptionsFromUpgrades(state.save.progression.upgradeLevels, "off"), state.puzzle.board, 100_000);
-    dispatch({ type: "contradiction", message: result.status === "unsat" ? "This position cannot be completed." : "No contradiction found." });
+    dispatch({ type: "contradiction", message: result.status === "unsat" ? copy.contradictionFound : copy.contradictionClear });
   };
 
   const handleCellClick = (index: number) => {
@@ -609,7 +813,7 @@ export function App() {
     }
     const placement = choosePlacementForCell(puzzle, state.puzzle.board, selectedPiece, state.rotations[selectedPiece.id] ?? 0, index);
     if (!placement) {
-      dispatch({ type: "toast", message: "No legal placement covers that cell." });
+      dispatch({ type: "toast", message: copy.noLegalPlacement });
       return;
     }
     dispatch({ type: "place", placement });
@@ -668,17 +872,18 @@ export function App() {
     <main className={appClassName}>
       <header className="topbar">
         <h1>puzzle_incremental</h1>
-        <div className="metric"><span>Compute</span><strong data-testid="compute">{formatNumber(state.save.economy.compute)} C</strong></div>
-        <div className="metric"><span>nodes/s</span><strong>{formatNumber(state.solver.stats?.measuredNodesPerSecond ?? 0)}</strong></div>
-        <button type="button" onClick={() => dispatch({ type: "set-settings-open", value: true })}>Settings</button>
-        <button type="button" onClick={() => dispatch({ type: "set-stats-open", value: true })}>Stats</button>
+        <div className="metric"><span>{copy.compute}</span><strong data-testid="compute">{formatNumber(state.save.economy.compute, language)} C</strong></div>
+        <div className="metric"><span>{copy.nodesPerSecond}</span><strong>{formatNumber(state.solver.stats?.measuredNodesPerSecond ?? 0, language)}</strong></div>
+        <button type="button" onClick={() => dispatch({ type: "set-tutorial-open", value: true })}>{copy.tutorial}</button>
+        <button type="button" onClick={() => dispatch({ type: "set-settings-open", value: true })}>{copy.settings}</button>
+        <button type="button" onClick={() => dispatch({ type: "set-stats-open", value: true })}>{copy.stats}</button>
       </header>
       {state.persistentWarning && <div className="warning" role="alert">{state.persistentWarning}</div>}
       {state.toast && <div className="toast" role="status" aria-live="polite" onClick={() => dispatch({ type: "toast", message: null })}>{state.toast}</div>}
 
       <section className="layout">
         <aside className="panel">
-          <h2>Pieces</h2>
+          <h2>{copy.pieces}</h2>
           <div className="piece-tray">
             {puzzle.pieces.map((piece) => {
               const placed = Boolean(state.puzzle.board.placementsByPieceId[piece.id]);
@@ -696,39 +901,39 @@ export function App() {
                   }}
                 >
                   <strong>{piece.type} #{piece.id.slice(1)}</strong>
-                  <span>{placed ? "Placed" : "Ready"}</span>
-                  <span>rot {state.puzzle.board.placementsByPieceId[piece.id]?.orientationIndex ?? state.rotations[piece.id] ?? 0}</span>
+                  <span>{placed ? copy.placed : copy.ready}</span>
+                  <span>{copy.rotation} {state.puzzle.board.placementsByPieceId[piece.id]?.orientationIndex ?? state.rotations[piece.id] ?? 0}</span>
                 </button>
               );
             })}
           </div>
           <div className="controls">
-            <button type="button" onClick={() => startNewPuzzle(false)}>New Puzzle</button>
-            <button type="button" onClick={() => startNewPuzzle(true)}>Daily Seed</button>
-            <button type="button" onClick={() => dispatch({ type: "reset-board" })}>Reset Board</button>
-            <button type="button" onClick={() => dispatch({ type: "undo" })} disabled={state.undoStack.length === 0}>Undo</button>
-            <button type="button" onClick={() => dispatch({ type: "redo" })} disabled={state.redoStack.length === 0}>Redo</button>
-            <button type="button" onClick={() => dispatch({ type: "rotate", direction: -1 })}>Rotate Left</button>
-            <button type="button" onClick={() => dispatch({ type: "rotate", direction: 1 })}>Rotate Right</button>
-            <button type="button" onClick={() => dispatch({ type: "remove-selected" })}>Remove Piece</button>
-            <button type="button" onClick={() => dispatch({ type: "scanner" })} disabled={(state.save.progression.upgradeLevels["placement-scanner"] ?? 0) <= 0} title="Requires Placement Scanner">Hint</button>
-            <button type="button" onClick={useContradictionDetector} disabled={(state.save.progression.upgradeLevels["contradiction-detector"] ?? 0) <= 0} title="Requires Contradiction Detector">Check</button>
-            <button type="button" onClick={() => dispatch({ type: "forced-move", placement: findForcedMove(puzzle, state.puzzle.board) })} disabled={(state.save.progression.upgradeLevels["forced-move"] ?? 0) <= 0} title="Requires Forced Move">Forced Move</button>
+            <button type="button" onClick={() => startNewPuzzle(false)}>{copy.newPuzzle}</button>
+            <button type="button" onClick={() => startNewPuzzle(true)}>{copy.dailySeed}</button>
+            <button type="button" onClick={() => dispatch({ type: "reset-board" })}>{copy.resetBoard}</button>
+            <button type="button" onClick={() => dispatch({ type: "undo" })} disabled={state.undoStack.length === 0}>{copy.undo}</button>
+            <button type="button" onClick={() => dispatch({ type: "redo" })} disabled={state.redoStack.length === 0}>{copy.redo}</button>
+            <button type="button" onClick={() => dispatch({ type: "rotate", direction: -1 })}>{copy.rotateLeft}</button>
+            <button type="button" onClick={() => dispatch({ type: "rotate", direction: 1 })}>{copy.rotateRight}</button>
+            <button type="button" onClick={() => dispatch({ type: "remove-selected" })}>{copy.removePiece}</button>
+            <button type="button" onClick={() => dispatch({ type: "scanner" })} disabled={(state.save.progression.upgradeLevels["placement-scanner"] ?? 0) <= 0} title={copy.requiresPlacementScanner}>{copy.hint}</button>
+            <button type="button" onClick={useContradictionDetector} disabled={(state.save.progression.upgradeLevels["contradiction-detector"] ?? 0) <= 0} title={copy.requiresContradictionDetector}>{copy.check}</button>
+            <button type="button" onClick={() => dispatch({ type: "forced-move", placement: findForcedMove(puzzle, state.puzzle.board) })} disabled={(state.save.progression.upgradeLevels["forced-move"] ?? 0) <= 0} title={copy.requiresForcedMove}>{copy.forcedMove}</button>
           </div>
         </aside>
 
         <section className="board-panel">
           <div className="board-header">
-            <span>Tier {puzzle.tier}</span>
-            <button type="button" onClick={() => navigator.clipboard?.writeText(puzzle.seed)}>seed: {puzzle.seed}</button>
-            <span>difficulty {puzzle.difficulty.score}</span>
+            <span>{copy.tier} {puzzle.tier}</span>
+            <button type="button" onClick={() => navigator.clipboard?.writeText(puzzle.seed)}>{copy.seed}: {puzzle.seed}</button>
+            <span>{copy.difficulty} {puzzle.difficulty.score}</span>
             <span>{state.puzzle.classification}</span>
           </div>
           <div
             className="board"
             style={{ gridTemplateColumns: `repeat(${puzzle.width}, minmax(28px, 1fr))` }}
             role="grid"
-            aria-label="Puzzle board"
+            aria-label={copy.boardLabel}
           >
             {Array.from({ length: puzzle.width * puzzle.height }, (_, index) => {
               const placed = placedByCell.get(index);
@@ -757,31 +962,31 @@ export function App() {
         </section>
 
         <aside className="panel">
-          <h2>Solver</h2>
+          <h2>{copy.solver}</h2>
           <div className="solver-grid">
-            <span>Status</span><strong data-testid="solver-status">{state.solver.status}</strong>
-            <span>Nodes</span><strong>{formatNumber(state.solver.stats?.nodes ?? 0)}</strong>
-            <span>Backtracks</span><strong>{formatNumber(state.solver.stats?.backtracks ?? 0)}</strong>
-            <span>Theory nodes/s</span><strong>{formatNumber(nodesPerSecond(state.save.progression.upgradeLevels))}</strong>
-            <span>Depth</span><strong>{state.solver.stats?.currentDepth ?? 0}</strong>
-            <span>Queue</span><strong>{state.solver.queue.length}/{queueCapacity(state.save.progression.upgradeLevels)}</strong>
-            <span>Parallel</span><strong>{parallelSessions(state.save.progression.upgradeLevels)}</strong>
+            <span>{copy.status}</span><strong data-testid="solver-status">{state.solver.status}</strong>
+            <span>{copy.nodes}</span><strong>{formatNumber(state.solver.stats?.nodes ?? 0, language)}</strong>
+            <span>{copy.backtracks}</span><strong>{formatNumber(state.solver.stats?.backtracks ?? 0, language)}</strong>
+            <span>{copy.theoryNodesPerSecond}</span><strong>{formatNumber(nodesPerSecond(state.save.progression.upgradeLevels), language)}</strong>
+            <span>{copy.depth}</span><strong>{state.solver.stats?.currentDepth ?? 0}</strong>
+            <span>{copy.queue}</span><strong>{state.solver.queue.length}/{queueCapacity(state.save.progression.upgradeLevels)}</strong>
+            <span>{copy.parallel}</span><strong>{parallelSessions(state.save.progression.upgradeLevels)}</strong>
           </div>
           <div className="controls">
-            <button type="button" onClick={startSolver} disabled={(state.save.progression.upgradeLevels["auto-solver"] ?? 0) <= 0 || state.solver.status === "running"} title="Requires Auto Solver">Start Solver</button>
-            <button type="button" onClick={pauseOrResumeSolver} disabled={!state.solver.sessionId}>{state.solver.status === "paused" ? "Resume" : "Pause"}</button>
-            <button type="button" onClick={cancelSolver} disabled={!state.solver.sessionId}>Cancel</button>
+            <button type="button" onClick={startSolver} disabled={(state.save.progression.upgradeLevels["auto-solver"] ?? 0) <= 0 || state.solver.status === "running"} title={copy.requiresAutoSolver}>{copy.startSolver}</button>
+            <button type="button" onClick={pauseOrResumeSolver} disabled={!state.solver.sessionId}>{state.solver.status === "paused" ? copy.resume : copy.pause}</button>
+            <button type="button" onClick={cancelSolver} disabled={!state.solver.sessionId}>{copy.cancel}</button>
             <button
               type="button"
               disabled={queueCapacity(state.save.progression.upgradeLevels) <= state.solver.queue.length}
               onClick={() => dispatch({ type: "enqueue", puzzle: generatePuzzle({ tier: state.save.progression.selectedTier, seed: `auto-${Date.now()}` }) })}
             >
-              Enqueue
+              {copy.enqueue}
             </button>
-            <button type="button" onClick={startQueue} disabled={state.solver.queue.length === 0 || (state.save.progression.upgradeLevels["auto-solver"] ?? 0) <= 0}>Start Queue</button>
+            <button type="button" onClick={startQueue} disabled={state.solver.queue.length === 0 || (state.save.progression.upgradeLevels["auto-solver"] ?? 0) <= 0}>{copy.startQueue}</button>
           </div>
 
-          <h2>Upgrades</h2>
+          <h2>{copy.upgrades}</h2>
           <div className="upgrade-list">
             {GAME_CONFIG.upgrades.map((upgrade) => {
               const level = state.save.progression.upgradeLevels[upgrade.id] ?? 0;
@@ -790,10 +995,10 @@ export function App() {
                 <article className="upgrade" key={upgrade.id}>
                   <div>
                     <strong>{upgrade.name}</strong>
-                    <span>Level {level}/{upgrade.maxLevel}</span>
+                    <span>{copy.level} {level}/{upgrade.maxLevel}</span>
                   </div>
-                  <p>{outcome.ok ? `Next: ${outcome.price}C` : `${getUpgradePrice(upgrade.id, level)}C, ${outcome.reason}`}</p>
-                  <button type="button" onClick={() => dispatch({ type: "purchase", upgradeId: upgrade.id })} disabled={!outcome.ok}>Buy</button>
+                  <p>{outcome.ok ? `${copy.next}: ${outcome.price}C` : `${getUpgradePrice(upgrade.id, level)}C, ${outcome.reason}`}</p>
+                  <button type="button" onClick={() => dispatch({ type: "purchase", upgradeId: upgrade.id })} disabled={!outcome.ok}>{copy.buy}</button>
                 </article>
               );
             })}
@@ -801,10 +1006,10 @@ export function App() {
         </aside>
       </section>
 
-      <section className="tier-row" aria-label="Tier selection">
+      <section className="tier-row" aria-label={copy.tierSelection}>
         {GAME_CONFIG.tiers.map((tier) => (
           <button key={tier.id} type="button" disabled={!isTierUnlocked(state.save.progression.upgradeLevels, tier.id)} className={state.save.progression.selectedTier === tier.id ? "selected" : ""} onClick={() => dispatch({ type: "set-tier", tier: tier.id })}>
-            Tier {tier.id}
+            {copy.tier} {tier.id}
           </button>
         ))}
       </section>
@@ -812,11 +1017,11 @@ export function App() {
       {state.clearResult && (
         <div className="modal" role="dialog" aria-modal="true">
           <div className="modal-body">
-            <h2>Clear</h2>
-            <p>{state.clearResult.classification} clear, +{state.clearResult.reward}C.</p>
-            <p>Difficulty {puzzle.difficulty.score}</p>
-            <button type="button" onClick={() => startNewPuzzle(false)}>Next Puzzle</button>
-            <button type="button" onClick={() => dispatch({ type: "toast", message: null })}>Close</button>
+            <h2>{copy.clear}</h2>
+            <p>{copy.clearSummary(state.clearResult.classification, state.clearResult.reward)}</p>
+            <p>{copy.difficulty} {puzzle.difficulty.score}</p>
+            <button type="button" onClick={() => startNewPuzzle(false)}>{copy.nextPuzzle}</button>
+            <button type="button" onClick={() => dispatch({ type: "toast", message: null })}>{copy.close}</button>
           </div>
         </div>
       )}
@@ -824,22 +1029,28 @@ export function App() {
       {state.settingsOpen && (
         <div className="modal" role="dialog" aria-modal="true">
           <div className="modal-body">
-            <h2>Settings</h2>
-            <label>Theme
+            <h2>{copy.settings}</h2>
+            <label>{copy.theme}
               <select value={theme} onChange={(event) => dispatch({ type: "set-theme", value: event.target.value as SaveDataV1["settings"]["theme"] })}>
-                <option value="system">System</option>
-                <option value="light">Light</option>
-                <option value="dark">Dark</option>
+                <option value="system">{copy.system}</option>
+                <option value="light">{copy.light}</option>
+                <option value="dark">{copy.dark}</option>
               </select>
             </label>
-            <label>Visualization
+            <label>{copy.language}
+              <select value={language} onChange={(event) => dispatch({ type: "set-language", value: event.target.value as SaveDataV1["settings"]["language"] })}>
+                <option value="en">{copy.english}</option>
+                <option value="ja">{copy.japanese}</option>
+              </select>
+            </label>
+            <label>{copy.visualization}
               <select value={state.save.settings.visualization} onChange={(event) => dispatch({ type: "set-visualization", value: event.target.value as SaveDataV1["settings"]["visualization"] })}>
-                <option value="on">On</option>
-                <option value="reduced">Reduced</option>
-                <option value="off">Off</option>
+                <option value="on">{copy.on}</option>
+                <option value="reduced">{copy.reduced}</option>
+                <option value="off">{copy.off}</option>
               </select>
             </label>
-            <label><input type="checkbox" checked={state.save.settings.highContrast} onChange={(event) => dispatch({ type: "set-high-contrast", value: event.target.checked })} /> High contrast</label>
+            <label><input type="checkbox" checked={state.save.settings.highContrast} onChange={(event) => dispatch({ type: "set-high-contrast", value: event.target.checked })} /> {copy.highContrast}</label>
             <button type="button" onClick={() => {
               const blob = new Blob([exportSave(saveFromState(state))], { type: "application/json" });
               const url = URL.createObjectURL(blob);
@@ -849,8 +1060,8 @@ export function App() {
               link.download = `puzzle_incremental-save-${stamp}.json`;
               link.click();
               URL.revokeObjectURL(url);
-            }}>Export Save</button>
-            <label className="file-button">Import Save
+            }}>{copy.exportSave}</button>
+            <label className="file-button">{copy.importSave}
               <input type="file" accept="application/json" onChange={(event) => {
                 const file = event.target.files?.[0];
                 if (!file) {
@@ -858,21 +1069,22 @@ export function App() {
                 }
                 file.text().then((text) => {
                   const imported = importSave(text);
-                  dispatch(imported ? { type: "import", save: imported } : { type: "toast", message: "Invalid save file." });
-                }).catch(() => dispatch({ type: "toast", message: "Import failed." }));
+                  dispatch(imported ? { type: "import", save: imported } : { type: "toast", message: copy.invalidSave });
+                }).catch(() => dispatch({ type: "toast", message: copy.importFailed }));
               }} />
             </label>
-            <label>Erase Save
-              <input value={eraseText} onChange={(event) => setEraseText(event.target.value)} placeholder="Type ERASE" />
+            <label>{copy.eraseSave}
+              <input value={eraseText} onChange={(event) => setEraseText(event.target.value)} placeholder={copy.erasePlaceholder} />
             </label>
             <button type="button" disabled={eraseText !== "ERASE"} onClick={() => {
               eraseSave();
               const fresh = createInitialSave();
               dispatch({ type: "erase", save: fresh });
               setEraseText("");
-            }}>Erase Save</button>
-            <p>Version {GAME_CONFIG.gameConfigVersion}</p>
-            <button type="button" onClick={() => dispatch({ type: "set-settings-open", value: false })}>Close</button>
+            }}>{copy.eraseSave}</button>
+            <button type="button" onClick={() => dispatch({ type: "set-tutorial-open", value: true })}>{copy.openTutorial}</button>
+            <p>{copy.version} {GAME_CONFIG.gameConfigVersion}</p>
+            <button type="button" onClick={() => dispatch({ type: "set-settings-open", value: false })}>{copy.close}</button>
           </div>
         </div>
       )}
@@ -880,12 +1092,27 @@ export function App() {
       {state.statsOpen && (
         <div className="modal" role="dialog" aria-modal="true">
           <div className="modal-body">
-            <h2>Stats</h2>
-            <p>Total clears {state.save.statistics.totalClears}</p>
+            <h2>{copy.stats}</h2>
+            <p>{copy.totalClears} {state.save.statistics.totalClears}</p>
             <p>Manual {state.save.statistics.manualClears}, Assisted {state.save.statistics.assistedClears}, Automated {state.save.statistics.automatedClears}</p>
-            <p>Lifetime solver nodes {formatNumber(state.save.statistics.lifetimeSolverNodes)}</p>
-            <p>Maximum difficulty {state.save.statistics.maximumDifficultyScore}</p>
-            <button type="button" onClick={() => dispatch({ type: "set-stats-open", value: false })}>Close</button>
+            <p>{copy.lifetimeSolverNodes} {formatNumber(state.save.statistics.lifetimeSolverNodes, language)}</p>
+            <p>{copy.maximumDifficulty} {state.save.statistics.maximumDifficultyScore}</p>
+            <button type="button" onClick={() => dispatch({ type: "set-stats-open", value: false })}>{copy.close}</button>
+          </div>
+        </div>
+      )}
+      {state.tutorialOpen && (
+        <div className="modal" role="dialog" aria-modal="true" aria-labelledby="tutorial-title">
+          <div className="modal-body tutorial-body">
+            <h2 id="tutorial-title">{copy.tutorialTitle}</h2>
+            <p>{copy.tutorialIntro}</p>
+            <ol className="tutorial-list">
+              {copy.tutorialSteps.map((step) => <li key={step}>{step}</li>)}
+            </ol>
+            <div className="modal-actions">
+              <button type="button" onClick={() => dispatch({ type: "complete-tutorial" })}>{copy.startPlaying}</button>
+              <button type="button" onClick={() => dispatch({ type: "set-tutorial-open", value: false })}>{copy.later}</button>
+            </div>
           </div>
         </div>
       )}
