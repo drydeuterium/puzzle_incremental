@@ -48,6 +48,14 @@ export function nodesPerSecond(levels: UpgradeState): number {
   return Math.round(GAME_CONFIG.solver.baseNodesPerSecond * GAME_CONFIG.solver.throughputMultiplierPerLevel ** level);
 }
 
+export function automatedRewardMultiplier(levels: UpgradeState): number {
+  const level = levels["solver-payout"] ?? 0;
+  return Math.min(
+    GAME_CONFIG.reward.automatedPayoutMaxMultiplier,
+    GAME_CONFIG.clearMultipliers.automated * GAME_CONFIG.reward.automatedPayoutMultiplierPerLevel ** level,
+  );
+}
+
 export function manualClearsForTier(statistics: Statistics, tier: number): number {
   return statistics.manualClearsByTier[String(tier)] ?? 0;
 }

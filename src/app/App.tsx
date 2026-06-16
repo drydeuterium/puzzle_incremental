@@ -5,7 +5,7 @@ import { calculateReward } from "../core/rewards";
 import { enumerateOrientations } from "../core/tetrominoes";
 import type { BoardState, ClearClassification, PieceInstance, Placement, PlacementValidation, PuzzleDefinition, SaveDataV1, SolverSessionId, SolverStats, UpgradeId } from "../core/types";
 import { GAME_CONFIG } from "../game/config";
-import { canPurchaseUpgrade, getUpgradeConfig, getUpgradePrice, isAutoSolverReady, isTierUnlocked, manualClearsForTier, nodesPerSecond, parallelSessions, queueCapacity, solverOptionsFromUpgrades } from "../game/upgrades";
+import { automatedRewardMultiplier, canPurchaseUpgrade, getUpgradeConfig, getUpgradePrice, isAutoSolverReady, isTierUnlocked, manualClearsForTier, nodesPerSecond, parallelSessions, queueCapacity, solverOptionsFromUpgrades } from "../game/upgrades";
 import { createInitialSave } from "../persistence/schema";
 import { eraseSave, exportSave, importSave, loadSave, saveGame } from "../persistence/saveRepository";
 import { solveToEnd } from "../solver/incrementalSolver";
@@ -141,6 +141,7 @@ const COPY = {
     queue: "Queue",
     parallel: "Parallel",
     manualUnlock: "Manual unlock",
+    solverPayout: "Solver payout",
     solverLanes: "Solver lanes",
     autoNext: "Auto next",
     lanesFull: "Solver lanes are full.",
@@ -243,6 +244,7 @@ const COPY = {
     queue: "キュー",
     parallel: "並列",
     manualUnlock: "手動解放",
+    solverPayout: "報酬倍率",
     solverLanes: "ソルバー盤面",
     autoNext: "自動次パズル",
     lanesFull: "ソルバー盤面が埋まっています。",
@@ -409,8 +411,12 @@ function awardClear(state: AppState, board: BoardState, stats?: SolverStats): Ap
   if (state.puzzle.cleared || !isSolved(state.puzzle.definition, board)) {
     return withSavedPuzzle(state, { puzzle: { ...state.puzzle, board } });
   }
-  const reward = calculateReward(state.puzzle.definition, state.puzzle.classification);
   const classification = state.puzzle.classification;
+  const reward = calculateReward(
+    state.puzzle.definition,
+    classification,
+    classification === "automated" ? automatedRewardMultiplier(state.save.progression.upgradeLevels) : undefined,
+  );
   const clearsByTier = {
     ...state.save.statistics.clearsByTier,
     [state.puzzle.definition.tier]: (state.save.statistics.clearsByTier[String(state.puzzle.definition.tier)] ?? 0) + 1,
@@ -710,7 +716,7 @@ function reducer(state: AppState, action: Action): AppState {
       if (state.solver.completedSessionIds.includes(action.sessionId)) {
         return state;
       }
-      const reward = calculateReward(action.puzzle, "automated");
+      const reward = calculateReward(action.puzzle, "automated", automatedRewardMultiplier(state.save.progression.upgradeLevels));
       const remainingActiveSessions = Math.max(0, state.solver.activeSessions - 1);
       return {
         ...state,
@@ -960,6 +966,7 @@ export function App() {
     ? copy.autoSolverLocked
     : copy.autoSolverManualLocked(puzzle.tier, manualClearsThisTier, autoSolverRequiredManualClears);
   const solverLaneCapacity = Math.max(0, parallelSessions(state.save.progression.upgradeLevels) - state.solver.activeSessions);
+  const solverPayoutMultiplier = automatedRewardMultiplier(state.save.progression.upgradeLevels);
 
   const handleWorkerMessage = useCallback((message: WorkerResponse) => {
     if (message.type === "STARTED") {
@@ -1350,6 +1357,7 @@ export function App() {
               <span>{copy.queue}</span><strong>{state.solver.queue.length}/{queueCapacity(state.save.progression.upgradeLevels)}</strong>
               <span>{copy.parallel}</span><strong>{parallelSessions(state.save.progression.upgradeLevels)}</strong>
               <span>{copy.manualUnlock}</span><strong>{Math.min(manualClearsThisTier, autoSolverRequiredManualClears)}/{autoSolverRequiredManualClears}</strong>
+              <span>{copy.solverPayout}</span><strong>{solverPayoutMultiplier.toFixed(2)}x</strong>
             </div>
             <div className="controls solver-controls">
               <button type="button" onClick={startSolver} disabled={!autoSolverReady || solverLaneCapacity <= 0} title={autoSolverReady ? undefined : autoSolverLockMessage}>{copy.startSolver}</button>

@@ -96,6 +96,7 @@ export type UpgradeId =
   | "forced-move"
   | "auto-solver"
   | "solver-throughput"
+  | "solver-payout"
   | "constraint-ordering"
   | "candidate-ordering"
   | "symmetry-pruning"

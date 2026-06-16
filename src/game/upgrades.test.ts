@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { createInitialStatistics } from "../persistence/schema";
-import { canPurchaseUpgrade, initialUpgradeState, isAutoSolverReady, isTierUnlocked, nodesPerSecond, solverOptionsFromUpgrades } from "./upgrades";
+import { automatedRewardMultiplier, canPurchaseUpgrade, initialUpgradeState, isAutoSolverReady, isTierUnlocked, nodesPerSecond, solverOptionsFromUpgrades } from "./upgrades";
 
 describe("upgrades", () => {
   it("blocks missing funds and prerequisites", () => {
@@ -27,5 +27,12 @@ describe("upgrades", () => {
     expect(nodesPerSecond(levels)).toBe(2);
     expect(isAutoSolverReady(levels, statistics, 0)).toBe(false);
     expect(isAutoSolverReady(levels, { ...statistics, manualClearsByTier: { 0: 5 } }, 0)).toBe(true);
+  });
+
+  it("starts automated rewards at 0.1x and improves them with solver payout", () => {
+    const levels = initialUpgradeState();
+    expect(automatedRewardMultiplier(levels)).toBeCloseTo(0.1);
+    expect(automatedRewardMultiplier({ ...levels, "solver-payout": 1 })).toBeGreaterThan(0.1);
+    expect(automatedRewardMultiplier({ ...levels, "solver-payout": 10 })).toBeCloseTo(1);
   });
 });

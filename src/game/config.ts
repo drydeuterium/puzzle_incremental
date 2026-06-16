@@ -32,11 +32,13 @@ export const GAME_CONFIG = {
   clearMultipliers: {
     manual: 3,
     assisted: 1.5,
-    automated: 1,
+    automated: 0.1,
   },
   reward: {
     cellRewardMultiplier: 2,
     difficultySqrtMultiplier: 12,
+    automatedPayoutMultiplierPerLevel: 1.26,
+    automatedPayoutMaxMultiplier: 1,
   },
   generator: {
     attemptLimit: 50,
@@ -73,6 +75,7 @@ export const GAME_CONFIG = {
     { id: "forced-move", name: "Forced Move", maxLevel: 1, basePrice: 380, priceMultiplier: 1, prerequisites: ["contradiction-detector"] },
     { id: "auto-solver", name: "Auto Solver", maxLevel: 1, basePrice: 700, priceMultiplier: 1, prerequisites: ["tier-2"] },
     { id: "solver-throughput", name: "Solver Throughput", maxLevel: 30, basePrice: 500, priceMultiplier: 1.82, prerequisites: ["auto-solver"] },
+    { id: "solver-payout", name: "Solver Payout", maxLevel: 10, basePrice: 900, priceMultiplier: 1.9, prerequisites: ["auto-solver"] },
     { id: "constraint-ordering", name: "Constraint Ordering", maxLevel: 1, basePrice: 1200, priceMultiplier: 1, prerequisites: ["auto-solver"] },
     { id: "tier-3", name: "Tier 3", maxLevel: 1, basePrice: 1500, priceMultiplier: 1, prerequisites: ["tier-2", "auto-solver"] },
     { id: "queue-capacity", name: "Queue Capacity", maxLevel: 10, basePrice: 2000, priceMultiplier: 2.1, prerequisites: ["auto-solver"] },
