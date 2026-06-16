@@ -1,5 +1,5 @@
 import { GAME_CONFIG } from "./config";
-import type { SolverOptions, UpgradeId, UpgradeState } from "../core/types";
+import type { SolverOptions, Statistics, UpgradeId, UpgradeState } from "../core/types";
 
 export function initialUpgradeState(): UpgradeState {
   return Object.fromEntries(GAME_CONFIG.upgrades.map((upgrade) => [upgrade.id, 0])) as UpgradeState;
@@ -46,6 +46,15 @@ export function isTierUnlocked(levels: UpgradeState, tier: number): boolean {
 export function nodesPerSecond(levels: UpgradeState): number {
   const level = levels["solver-throughput"] ?? 0;
   return Math.round(GAME_CONFIG.solver.baseNodesPerSecond * GAME_CONFIG.solver.throughputMultiplierPerLevel ** level);
+}
+
+export function manualClearsForTier(statistics: Statistics, tier: number): number {
+  return statistics.manualClearsByTier[String(tier)] ?? 0;
+}
+
+export function isAutoSolverReady(levels: UpgradeState, statistics: Statistics, tier: number): boolean {
+  return (levels["auto-solver"] ?? 0) > 0
+    && manualClearsForTier(statistics, tier) >= GAME_CONFIG.solver.manualClearsRequiredByTierForAutoSolver;
 }
 
 export function solverOptionsFromUpgrades(levels: UpgradeState, visualization: SolverOptions["visualization"]): SolverOptions {

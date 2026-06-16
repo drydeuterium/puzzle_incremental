@@ -41,5 +41,6 @@ describe("save repository", () => {
     expect(loaded.save.settings.language).toBe("en");
     expect(loaded.save.settings.tutorialCompleted).toBe(false);
     expect(loaded.save.settings.hidePurchasedUpgrades).toBe(true);
+    expect(loaded.save.statistics.manualClearsByTier).toEqual({});
   });
 });

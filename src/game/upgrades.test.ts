@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { canPurchaseUpgrade, initialUpgradeState, isTierUnlocked, solverOptionsFromUpgrades } from "./upgrades";
+import { createInitialStatistics } from "../persistence/schema";
+import { canPurchaseUpgrade, initialUpgradeState, isAutoSolverReady, isTierUnlocked, nodesPerSecond, solverOptionsFromUpgrades } from "./upgrades";
 
 describe("upgrades", () => {
   it("blocks missing funds and prerequisites", () => {
@@ -15,5 +16,16 @@ describe("upgrades", () => {
     const options = solverOptionsFromUpgrades(levels, "reduced");
     expect(options.heuristics.constraintOrdering).toBe(true);
     expect(options.heuristics.deadStateCacheEntries).toBe(2000);
+  });
+
+  it("uses slower base solver speed and requires manual clears per tier", () => {
+    const levels = { ...initialUpgradeState(), "auto-solver": 1 };
+    const statistics = {
+      ...createInitialStatistics("2026-01-01T00:00:00.000Z"),
+      manualClearsByTier: { 0: 4 },
+    };
+    expect(nodesPerSecond(levels)).toBe(2);
+    expect(isAutoSolverReady(levels, statistics, 0)).toBe(false);
+    expect(isAutoSolverReady(levels, { ...statistics, manualClearsByTier: { 0: 5 } }, 0)).toBe(true);
   });
 });

@@ -26,6 +26,7 @@ export function createInitialStatistics(nowIso: string): Statistics {
     assistedClears: 0,
     automatedClears: 0,
     clearsByTier: {},
+    manualClearsByTier: {},
     lifetimeSolverNodes: 0,
     lifetimeBacktracks: 0,
     automatedCellsSolved: 0,
@@ -79,6 +80,13 @@ function isLanguage(value: unknown): value is UserSettings["language"] {
   return value === "en" || value === "ja";
 }
 
+function normalizeCountRecord(value: unknown): Readonly<Record<string, number>> {
+  if (!isRecord(value)) {
+    return {};
+  }
+  return Object.fromEntries(Object.entries(value).filter(([, count]) => isSafeNonNegativeInteger(count))) as Record<string, number>;
+}
+
 export function validateSaveData(value: unknown): SaveDataV1 | null {
   if (!isRecord(value) || value.schemaVersion !== 1) {
     return null;
@@ -100,8 +108,13 @@ export function validateSaveData(value: unknown): SaveDataV1 | null {
     return null;
   }
   const defaults = defaultSettings();
+  const defaultStatistics = createInitialStatistics(typeof value.createdAt === "string" ? value.createdAt : new Date().toISOString());
   const normalized: SaveDataV1 = {
     ...(value as SaveDataV1),
+    statistics: {
+      ...(value as SaveDataV1).statistics,
+      manualClearsByTier: isRecord(statistics.manualClearsByTier) ? normalizeCountRecord(statistics.manualClearsByTier) : defaultStatistics.manualClearsByTier,
+    },
     settings: {
       visualization: isVisualization(settings.visualization) ? settings.visualization : defaults.visualization,
       animationSpeed: typeof settings.animationSpeed === "number" ? settings.animationSpeed : defaults.animationSpeed,

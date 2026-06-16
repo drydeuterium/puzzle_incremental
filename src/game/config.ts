@@ -47,8 +47,9 @@ export const GAME_CONFIG = {
   solver: {
     workerQuantumMilliseconds: 100,
     visualizationMaxFps: 10,
-    baseNodesPerSecond: 20,
+    baseNodesPerSecond: 2,
     throughputMultiplierPerLevel: 1.55,
+    manualClearsRequiredByTierForAutoSolver: 5,
   },
   save: {
     schemaVersion: 1,

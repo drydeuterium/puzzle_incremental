@@ -83,6 +83,28 @@ function seedPurchasedUpgrade(): void {
   window.localStorage.setItem(BACKUP_SAVE_KEY, JSON.stringify(save));
 }
 
+function seedAutoSolverProgress(manualClears: number): void {
+  const now = new Date("2026-01-01T00:00:00.000Z");
+  const base = createInitialSave(now);
+  const save = {
+    ...base,
+    settings: { ...base.settings, tutorialCompleted: true },
+    progression: {
+      ...base.progression,
+      upgradeLevels: {
+        ...base.progression.upgradeLevels,
+        "auto-solver": 1,
+      },
+    },
+    statistics: {
+      ...base.statistics,
+      manualClearsByTier: { 0: manualClears },
+    },
+  };
+  window.localStorage.setItem(SAVE_KEY, JSON.stringify(save));
+  window.localStorage.setItem(BACKUP_SAVE_KEY, JSON.stringify(save));
+}
+
 describe("App", () => {
   beforeEach(() => {
     window.localStorage.clear();
@@ -209,5 +231,19 @@ describe("App", () => {
     expect(screen.queryByText("Placement Scanner")).not.toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Hide purchased: On" }));
     expect(screen.getByText("Placement Scanner")).toBeInTheDocument();
+  });
+
+  it("requires five manual clears on the current tier before auto solver starts", () => {
+    seedAutoSolverProgress(4);
+    const { unmount } = render(<App />);
+    expect(screen.getByRole("button", { name: "Start Solver" })).toBeDisabled();
+    expect(screen.getByText("4/5")).toBeInTheDocument();
+    unmount();
+
+    window.localStorage.clear();
+    seedAutoSolverProgress(5);
+    render(<App />);
+    expect(screen.getByRole("button", { name: "Start Solver" })).toBeEnabled();
+    expect(screen.getByText("5/5")).toBeInTheDocument();
   });
 });

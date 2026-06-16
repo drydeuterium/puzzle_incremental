@@ -5,7 +5,7 @@ import { calculateReward } from "../core/rewards";
 import { enumerateOrientations } from "../core/tetrominoes";
 import type { BoardState, ClearClassification, PieceInstance, Placement, PlacementValidation, PuzzleDefinition, SaveDataV1, SolverSessionId, SolverStats, UpgradeId } from "../core/types";
 import { GAME_CONFIG } from "../game/config";
-import { canPurchaseUpgrade, getUpgradeConfig, getUpgradePrice, isTierUnlocked, nodesPerSecond, parallelSessions, queueCapacity, solverOptionsFromUpgrades } from "../game/upgrades";
+import { canPurchaseUpgrade, getUpgradeConfig, getUpgradePrice, isAutoSolverReady, isTierUnlocked, manualClearsForTier, nodesPerSecond, parallelSessions, queueCapacity, solverOptionsFromUpgrades } from "../game/upgrades";
 import { createInitialSave } from "../persistence/schema";
 import { eraseSave, exportSave, importSave, loadSave, saveGame } from "../persistence/saveRepository";
 import { solveToEnd } from "../solver/incrementalSolver";
@@ -121,6 +121,7 @@ const COPY = {
     depth: "Depth",
     queue: "Queue",
     parallel: "Parallel",
+    manualUnlock: "Manual unlock",
     startSolver: "Start Solver",
     pause: "Pause",
     resume: "Resume",
@@ -174,6 +175,7 @@ const COPY = {
     requiresForcedMove: "Requires Forced Move",
     requiresAutoSolver: "Requires Auto Solver",
     autoSolverLocked: "Auto Solver is locked.",
+    autoSolverManualLocked: (tier: number, count: number, required: number) => `Auto Solver requires ${required} manual clears on Tier ${tier} (${count}/${required}).`,
     queueEmpty: "Queue is empty.",
     discardCurrentPuzzle: "Discard current puzzle?",
     contradictionLocked: "Contradiction Detector is locked.",
@@ -217,6 +219,7 @@ const COPY = {
     depth: "深さ",
     queue: "キュー",
     parallel: "並列",
+    manualUnlock: "手動解放",
     startSolver: "ソルバー開始",
     pause: "一時停止",
     resume: "再開",
@@ -270,6 +273,7 @@ const COPY = {
     requiresForcedMove: "Forced Move が必要",
     requiresAutoSolver: "Auto Solver が必要",
     autoSolverLocked: "Auto Solver は未解放です。",
+    autoSolverManualLocked: (tier: number, count: number, required: number) => `Tier ${tier} の手動クリアが ${required} 回必要です（${count}/${required}）。`,
     queueEmpty: "キューが空です。",
     discardCurrentPuzzle: "現在のパズルを破棄しますか?",
     contradictionLocked: "Contradiction Detector は未解放です。",
@@ -316,6 +320,18 @@ function saveFromState(state: AppState): SaveDataV1 {
   };
 }
 
+function createIdleSolverState(): SolverUiState {
+  return {
+    status: "idle",
+    sessionId: null,
+    stats: null,
+    preview: [],
+    queue: [],
+    activeSessions: 0,
+    completedSessionIds: [],
+  };
+}
+
 function createInitialState(): AppState {
   const loaded = loadSave();
   const save = loaded.save;
@@ -333,15 +349,7 @@ function createInitialState(): AppState {
     settingsOpen: false,
     statsOpen: false,
     tutorialOpen: !save.settings.tutorialCompleted,
-    solver: {
-      status: "idle",
-      sessionId: null,
-      stats: null,
-      preview: [],
-      queue: [],
-      activeSessions: 0,
-      completedSessionIds: [],
-    },
+    solver: createIdleSolverState(),
   };
 }
 
@@ -368,6 +376,12 @@ function awardClear(state: AppState, board: BoardState, stats?: SolverStats): Ap
     ...state.save.statistics.clearsByTier,
     [state.puzzle.definition.tier]: (state.save.statistics.clearsByTier[String(state.puzzle.definition.tier)] ?? 0) + 1,
   };
+  const manualClearsByTier = classification === "manual"
+    ? {
+        ...state.save.statistics.manualClearsByTier,
+        [state.puzzle.definition.tier]: (state.save.statistics.manualClearsByTier[String(state.puzzle.definition.tier)] ?? 0) + 1,
+      }
+    : state.save.statistics.manualClearsByTier;
   const elapsed = Date.now() - state.puzzle.startedAt;
   const fastestManualClearMilliseconds = classification === "manual"
     ? Math.min(state.save.statistics.fastestManualClearMilliseconds ?? elapsed, elapsed)
@@ -385,6 +399,7 @@ function awardClear(state: AppState, board: BoardState, stats?: SolverStats): Ap
       assistedClears: state.save.statistics.assistedClears + (classification === "assisted" ? 1 : 0),
       automatedClears: state.save.statistics.automatedClears + (classification === "automated" ? 1 : 0),
       clearsByTier,
+      manualClearsByTier,
       lifetimeSolverNodes: state.save.statistics.lifetimeSolverNodes + (stats?.nodes ?? 0),
       lifetimeBacktracks: state.save.statistics.lifetimeBacktracks + (stats?.backtracks ?? 0),
       automatedCellsSolved: state.save.statistics.automatedCellsSolved + (classification === "automated" ? state.puzzle.definition.usableCellIndices.length : 0),
@@ -485,7 +500,7 @@ function reducer(state: AppState, action: Action): AppState {
       });
     }
     case "reset-board":
-      return withSavedPuzzle(state, { puzzle: { ...state.puzzle, board: createEmptyBoard(), cleared: false }, undoStack: [...state.undoStack, state.puzzle.board], redoStack: [] });
+      return withSavedPuzzle(state, { puzzle: { ...state.puzzle, board: createEmptyBoard(), cleared: false }, undoStack: [...state.undoStack, state.puzzle.board], redoStack: [], solver: createIdleSolverState() });
     case "new-puzzle":
       return withSavedPuzzle(state, {
         puzzle: { definition: action.puzzle, board: createEmptyBoard(), classification: "manual", startedAt: Date.now(), cleared: false },
@@ -495,6 +510,7 @@ function reducer(state: AppState, action: Action): AppState {
         redoStack: [],
         scannerEnabled: false,
         clearResult: null,
+        solver: createIdleSolverState(),
       });
     case "set-tier":
       return { ...state, save: { ...state.save, progression: { ...state.save.progression, selectedTier: action.tier } } };
@@ -554,7 +570,7 @@ function reducer(state: AppState, action: Action): AppState {
     case "complete-tutorial":
       return { ...state, tutorialOpen: false, save: { ...state.save, settings: { ...state.save.settings, tutorialCompleted: true } } };
     case "solver-started":
-      return withSavedPuzzle({ ...state, puzzle: classifyAutomated(state) }, { solver: { ...state.solver, status: "running", sessionId: action.sessionId, activeSessions: 1 }, toast: "Auto Solver started." });
+      return withSavedPuzzle({ ...state, puzzle: classifyAutomated(state) }, { solver: { ...state.solver, status: "running", sessionId: action.sessionId, stats: null, preview: [], activeSessions: 1 }, toast: "Auto Solver started." });
     case "solver-progress":
       if (state.solver.sessionId !== action.sessionId) {
         return state;
@@ -567,18 +583,18 @@ function reducer(state: AppState, action: Action): AppState {
       const board = boardFromPlacements(state.puzzle.definition, action.solution);
       const next = withSavedPuzzle(state, {
         puzzle: { ...state.puzzle, board, classification: "automated" },
-        solver: { ...state.solver, status: "solved", stats: action.stats, preview: action.solution, activeSessions: 0, completedSessionIds: [...state.solver.completedSessionIds, action.sessionId] },
+        solver: { ...state.solver, status: "solved", sessionId: null, stats: action.stats, preview: [], activeSessions: 0, completedSessionIds: [...state.solver.completedSessionIds, action.sessionId] },
       });
       return awardClear(next, board, action.stats);
     }
     case "solver-unsat":
-      return { ...state, solver: { ...state.solver, status: "unsat", stats: action.stats, activeSessions: 0 }, toast: "Solver failed: unsat." };
+      return { ...state, solver: { ...state.solver, status: "unsat", sessionId: null, stats: action.stats, preview: [], activeSessions: 0 }, toast: "Solver failed: unsat." };
     case "solver-error":
-      return { ...state, solver: { ...state.solver, status: "error", activeSessions: 0 }, persistentWarning: action.message };
+      return { ...state, solver: { ...state.solver, status: "error", sessionId: null, preview: [], activeSessions: 0 }, persistentWarning: action.message };
     case "solver-paused":
       return { ...state, solver: { ...state.solver, status: "paused" } };
     case "solver-cancelled":
-      return { ...state, solver: { ...state.solver, status: "cancelled", activeSessions: 0 } };
+      return { ...state, solver: { ...state.solver, status: "cancelled", sessionId: null, preview: [], activeSessions: 0 } };
     case "enqueue":
       return { ...state, solver: { ...state.solver, queue: [...state.solver.queue, action.puzzle] } };
     case "queue-started":
@@ -767,6 +783,12 @@ export function App() {
     const level = state.save.progression.upgradeLevels[upgrade.id] ?? 0;
     return !state.save.settings.hidePurchasedUpgrades || level < upgrade.maxLevel;
   });
+  const manualClearsThisTier = manualClearsForTier(state.save.statistics, puzzle.tier);
+  const autoSolverRequiredManualClears = GAME_CONFIG.solver.manualClearsRequiredByTierForAutoSolver;
+  const autoSolverReady = isAutoSolverReady(state.save.progression.upgradeLevels, state.save.statistics, puzzle.tier);
+  const autoSolverLockMessage = (state.save.progression.upgradeLevels["auto-solver"] ?? 0) <= 0
+    ? copy.autoSolverLocked
+    : copy.autoSolverManualLocked(puzzle.tier, manualClearsThisTier, autoSolverRequiredManualClears);
 
   const handleWorkerMessage = useCallback((message: WorkerResponse) => {
     if (message.type === "STARTED") {
@@ -805,8 +827,8 @@ export function App() {
   }, [handleWorkerMessage]);
 
   const startSolver = () => {
-    if ((state.save.progression.upgradeLevels["auto-solver"] ?? 0) <= 0) {
-      dispatch({ type: "toast", message: copy.autoSolverLocked });
+    if (!autoSolverReady) {
+      dispatch({ type: "toast", message: autoSolverLockMessage });
       return;
     }
     const sessionId = `session-${Date.now()}`;
@@ -833,8 +855,8 @@ export function App() {
   };
 
   const startQueue = () => {
-    if ((state.save.progression.upgradeLevels["auto-solver"] ?? 0) <= 0) {
-      dispatch({ type: "toast", message: copy.autoSolverLocked });
+    if (!autoSolverReady) {
+      dispatch({ type: "toast", message: autoSolverLockMessage });
       return;
     }
     const available = Math.max(0, parallelSessions(state.save.progression.upgradeLevels) - state.solver.activeSessions);
@@ -961,7 +983,8 @@ export function App() {
   }
   const previewCells = new Set(selectedPlacementPreview?.placement.cellIndices ?? []);
   const invalidPreview = Boolean(selectedPlacementPreview && !selectedPlacementPreview.validation.ok);
-  const solverPreviewCells = new Set(state.solver.preview.flatMap((placement) => placement.cellIndices));
+  const showSolverPreview = state.solver.status === "running" || state.solver.status === "paused";
+  const solverPreviewCells = new Set(showSolverPreview ? state.solver.preview.flatMap((placement) => placement.cellIndices) : []);
 
   const theme = state.save.settings.theme ?? "system";
   const appClassName = ["app", state.save.settings.highContrast ? "high-contrast" : "", theme === "dark" ? "dark" : "", theme === "light" ? "light" : ""].filter(Boolean).join(" ");
@@ -1107,19 +1130,20 @@ export function App() {
               <span>{copy.depth}</span><strong>{state.solver.stats?.currentDepth ?? 0}</strong>
               <span>{copy.queue}</span><strong>{state.solver.queue.length}/{queueCapacity(state.save.progression.upgradeLevels)}</strong>
               <span>{copy.parallel}</span><strong>{parallelSessions(state.save.progression.upgradeLevels)}</strong>
+              <span>{copy.manualUnlock}</span><strong>{Math.min(manualClearsThisTier, autoSolverRequiredManualClears)}/{autoSolverRequiredManualClears}</strong>
             </div>
             <div className="controls solver-controls">
-              <button type="button" onClick={startSolver} disabled={(state.save.progression.upgradeLevels["auto-solver"] ?? 0) <= 0 || state.solver.status === "running"} title={copy.requiresAutoSolver}>{copy.startSolver}</button>
+              <button type="button" onClick={startSolver} disabled={!autoSolverReady || state.solver.status === "running"} title={autoSolverReady ? undefined : autoSolverLockMessage}>{copy.startSolver}</button>
               <button type="button" onClick={pauseOrResumeSolver} disabled={!state.solver.sessionId}>{state.solver.status === "paused" ? copy.resume : copy.pause}</button>
               <button type="button" onClick={cancelSolver} disabled={!state.solver.sessionId}>{copy.cancel}</button>
               <button
                 type="button"
-                disabled={queueCapacity(state.save.progression.upgradeLevels) <= state.solver.queue.length}
+                disabled={!autoSolverReady || queueCapacity(state.save.progression.upgradeLevels) <= state.solver.queue.length}
                 onClick={() => dispatch({ type: "enqueue", puzzle: generatePuzzle({ tier: state.save.progression.selectedTier, seed: `auto-${Date.now()}` }) })}
               >
                 {copy.enqueue}
               </button>
-              <button type="button" onClick={startQueue} disabled={state.solver.queue.length === 0 || (state.save.progression.upgradeLevels["auto-solver"] ?? 0) <= 0}>{copy.startQueue}</button>
+              <button type="button" onClick={startQueue} disabled={state.solver.queue.length === 0 || !autoSolverReady}>{copy.startQueue}</button>
             </div>
           </section>
 

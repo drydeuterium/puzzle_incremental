@@ -126,6 +126,7 @@ export type Statistics = Readonly<{
   assistedClears: number;
   automatedClears: number;
   clearsByTier: Readonly<Record<string, number>>;
+  manualClearsByTier: Readonly<Record<string, number>>;
   lifetimeSolverNodes: number;
   lifetimeBacktracks: number;
   automatedCellsSolved: number;
