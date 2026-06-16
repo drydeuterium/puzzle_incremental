@@ -115,6 +115,8 @@ describe("App", () => {
     render(<App />);
     expect(screen.getByRole("heading", { name: "Quick start" })).toBeInTheDocument();
     expect(screen.getByTestId("compute")).toHaveTextContent("0 C");
+    expect(screen.getByText("Compute/s")).toBeInTheDocument();
+    expect(screen.getByTestId("compute-per-second")).toHaveTextContent("0");
     expect(screen.getByRole("grid", { name: "Puzzle board" })).toBeInTheDocument();
     expect(screen.getAllByText(/Ready|Placed/).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/not enough Compute/).length).toBeGreaterThan(0);

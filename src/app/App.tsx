@@ -28,6 +28,11 @@ type SolverRun = Readonly<{
   preview: readonly Placement[];
 }>;
 
+type ComputeRateSample = Readonly<{
+  time: number;
+  lifetimeCompute: number;
+}>;
+
 type SolverRunSession = Readonly<{
   sessionId: SolverSessionId;
   puzzle: PuzzleDefinition;
@@ -146,6 +151,7 @@ const UPGRADE_NAMES_JA: Record<UpgradeId, string> = {
 const COPY = {
   en: {
     compute: "Compute",
+    computePerSecond: "Compute/s",
     nodesPerSecond: "nodes/s",
     settings: "Settings",
     stats: "Stats",
@@ -283,6 +289,7 @@ const COPY = {
   },
   ja: {
     compute: "Compute",
+    computePerSecond: "Compute/s",
     nodesPerSecond: "nodes/s",
     settings: "設定",
     stats: "統計",
@@ -421,6 +428,9 @@ const COPY = {
 } as const;
 
 type AppCopy = (typeof COPY)[keyof typeof COPY];
+
+const COMPUTE_RATE_WINDOW_MS = 60_000;
+const COMPUTE_RATE_TICK_MS = 1_000;
 
 function copyForSave(save: SaveDataV1): AppCopy {
   return COPY[save.settings.language ?? "en"];
@@ -932,6 +942,25 @@ function formatNumber(value: number, language: SaveDataV1["settings"]["language"
   return new Intl.NumberFormat(language === "ja" ? "ja-JP" : "en-US").format(value);
 }
 
+function formatRate(value: number, language: SaveDataV1["settings"]["language"]): string {
+  return new Intl.NumberFormat(language === "ja" ? "ja-JP" : "en-US", {
+    maximumFractionDigits: 2,
+  }).format(value);
+}
+
+function measuredComputePerSecond(samples: readonly ComputeRateSample[]): number {
+  if (samples.length < 2) {
+    return 0;
+  }
+  const oldest = samples[0];
+  const newest = samples[samples.length - 1];
+  const elapsedSeconds = (newest.time - oldest.time) / 1000;
+  if (elapsedSeconds <= 0) {
+    return 0;
+  }
+  return Math.max(0, (newest.lifetimeCompute - oldest.lifetimeCompute) / elapsedSeconds);
+}
+
 function findForcedMove(puzzle: PuzzleDefinition, board: BoardState): Placement | null {
   for (const index of puzzle.usableCellIndices) {
     if (boardPlacements(board).some((placement) => placement.cellIndices.includes(index))) {
@@ -1050,8 +1079,11 @@ export function App() {
   const [state, dispatch] = useReducer(reducer, undefined, createInitialState);
   const workerRef = useRef<SolverWorkerClient | null>(null);
   const solverSessionsRef = useRef<Map<SolverSessionId, PuzzleDefinition>>(new Map());
+  const computeRateSamplesRef = useRef<ComputeRateSample[]>([]);
+  const computeRateSaveCreatedAtRef = useRef<string | null>(null);
   const [hoverCell, setHoverCell] = useState<number | null>(null);
   const [eraseText, setEraseText] = useState("");
+  const [computePerSecond, setComputePerSecond] = useState(0);
 
   useEffect(() => {
     try {
@@ -1076,6 +1108,35 @@ export function App() {
   useEffect(() => {
     return () => workerRef.current?.dispose();
   }, []);
+
+  useEffect(() => {
+    const sampleComputeRate = () => {
+      const now = Date.now();
+      const lifetimeCompute = state.save.economy.lifetimeCompute;
+      if (computeRateSaveCreatedAtRef.current !== state.save.createdAt) {
+        computeRateSaveCreatedAtRef.current = state.save.createdAt;
+        computeRateSamplesRef.current = [{ time: now, lifetimeCompute }];
+        setComputePerSecond(0);
+        return;
+      }
+      const previous = computeRateSamplesRef.current[computeRateSamplesRef.current.length - 1];
+      if (previous && lifetimeCompute < previous.lifetimeCompute) {
+        computeRateSamplesRef.current = [{ time: now, lifetimeCompute }];
+        setComputePerSecond(0);
+        return;
+      }
+      const cutoff = now - COMPUTE_RATE_WINDOW_MS;
+      const samples = [
+        ...computeRateSamplesRef.current.filter((sample) => sample.time >= cutoff),
+        { time: now, lifetimeCompute },
+      ];
+      computeRateSamplesRef.current = samples;
+      setComputePerSecond(measuredComputePerSecond(samples));
+    };
+    sampleComputeRate();
+    const interval = window.setInterval(sampleComputeRate, COMPUTE_RATE_TICK_MS);
+    return () => window.clearInterval(interval);
+  }, [state.save.createdAt, state.save.economy.lifetimeCompute]);
 
   const puzzle = state.puzzle.definition;
   const placedByCell = useMemo(() => {
@@ -1345,6 +1406,7 @@ export function App() {
       <header className="topbar">
         <h1>puzzle_incremental</h1>
         <div className="metric"><span>{copy.compute}</span><strong data-testid="compute">{formatNumber(state.save.economy.compute, language)} C</strong></div>
+        <div className="metric"><span>{copy.computePerSecond}</span><strong data-testid="compute-per-second">{formatRate(computePerSecond, language)}</strong></div>
         <div className="metric"><span>{copy.nodesPerSecond}</span><strong>{formatNumber(state.solver.stats?.measuredNodesPerSecond ?? 0, language)}</strong></div>
         <button type="button" onClick={() => dispatch({ type: "set-tutorial-open", value: true })}>{copy.tutorial}</button>
         <button type="button" onClick={() => dispatch({ type: "set-settings-open", value: true })}>{copy.settings}</button>
