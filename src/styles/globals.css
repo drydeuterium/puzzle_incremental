@@ -133,11 +133,17 @@ button:disabled {
 
 .piece-card {
   display: grid;
-  grid-template-columns: 1fr auto;
-  gap: 3px 8px;
-  min-height: 50px;
-  padding: 7px;
+  grid-template-columns: 42px minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+  min-height: 66px;
+  padding: 8px;
   text-align: left;
+}
+
+.piece-card.placed-card {
+  border-color: var(--piece-border);
+  background: linear-gradient(90deg, color-mix(in srgb, var(--piece-color) 22%, var(--surface)) 0%, var(--surface) 78%);
 }
 
 .piece-card.selected,
@@ -145,6 +151,53 @@ button:disabled {
 .toggle-button.selected {
   border-color: var(--accent);
   box-shadow: inset 0 0 0 2px var(--accent);
+}
+
+.piece-info {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.piece-info strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.piece-status {
+  align-self: start;
+  white-space: nowrap;
+}
+
+.piece-card.placed-card .piece-status {
+  color: var(--text);
+  font-weight: 700;
+}
+
+.piece-mini {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 2px;
+  width: 38px;
+  height: 38px;
+  padding: 2px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: var(--surface-2);
+}
+
+.piece-mini-cell {
+  min-width: 0;
+  min-height: 0;
+  border-radius: 2px;
+  background: transparent;
+}
+
+.piece-mini-cell.filled {
+  border: 1px solid var(--piece-border);
+  background: var(--piece-color);
+  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 22%);
 }
 
 .controls {
@@ -193,6 +246,7 @@ button:disabled {
 }
 
 .cell {
+  position: relative;
   aspect-ratio: 1;
   min-width: 28px;
   min-height: 28px;
@@ -203,9 +257,20 @@ button:disabled {
 }
 
 .cell.placed {
-  border: 2px solid #111;
+  border: 2px solid var(--piece-border);
   background: var(--piece-color);
   color: #ffffff;
+  text-shadow: 0 1px 2px rgb(0 0 0 / 55%);
+  box-shadow:
+    inset 0 0 0 2px rgb(255 255 255 / 18%),
+    0 1px 4px rgb(0 0 0 / 28%);
+}
+
+.cell.selected-placement {
+  box-shadow:
+    inset 0 0 0 3px rgb(255 255 255 / 70%),
+    0 0 0 2px var(--accent),
+    0 1px 4px rgb(0 0 0 / 28%);
 }
 
 .cell.blocked {
@@ -213,8 +278,32 @@ button:disabled {
 }
 
 .cell.preview {
-  border: 2px dashed var(--accent);
-  background: color-mix(in srgb, var(--accent) 25%, var(--surface));
+  border: 2px dashed var(--preview-piece-border, var(--accent));
+  background: color-mix(in srgb, var(--preview-piece-color, var(--accent)) 32%, var(--surface));
+}
+
+.cell.invalid-preview {
+  border: 2px solid var(--danger);
+  background: color-mix(in srgb, var(--preview-piece-color, var(--danger)) 36%, var(--surface));
+  color: #ffffff;
+  box-shadow:
+    inset 0 0 0 2px rgb(255 255 255 / 20%),
+    0 0 0 2px color-mix(in srgb, var(--danger) 70%, transparent);
+}
+
+.cell.placed.invalid-preview {
+  background:
+    repeating-linear-gradient(135deg, rgb(180 35 24 / 68%) 0 6px, rgb(180 35 24 / 28%) 6px 12px),
+    var(--piece-color);
+}
+
+.cell.invalid-preview::after {
+  content: "";
+  position: absolute;
+  inset: 4px;
+  border: 2px dashed rgb(255 255 255 / 85%);
+  border-radius: 3px;
+  pointer-events: none;
 }
 
 .cell.scanner {

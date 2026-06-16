@@ -2,7 +2,8 @@ import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "r
 import { applyPlacement, boardFromPlacements, boardPlacements, canPlace, createEmptyBoard, createPlacement, enumeratePlacements, isSolved, removePiece } from "../core/board";
 import { generatePuzzle, dailySeed } from "../core/generator";
 import { calculateReward } from "../core/rewards";
-import type { BoardState, ClearClassification, Placement, PuzzleDefinition, SaveDataV1, SolverSessionId, SolverStats, UpgradeId } from "../core/types";
+import { enumerateOrientations } from "../core/tetrominoes";
+import type { BoardState, ClearClassification, PieceInstance, Placement, PlacementValidation, PuzzleDefinition, SaveDataV1, SolverSessionId, SolverStats, UpgradeId } from "../core/types";
 import { GAME_CONFIG } from "../game/config";
 import { canPurchaseUpgrade, getUpgradeConfig, getUpgradePrice, isTierUnlocked, nodesPerSecond, parallelSessions, queueCapacity, solverOptionsFromUpgrades } from "../game/upgrades";
 import { createInitialSave } from "../persistence/schema";
@@ -50,6 +51,7 @@ type Action =
   | Readonly<{ type: "select-piece"; pieceId: string | null }>
   | Readonly<{ type: "place"; placement: Placement }>
   | Readonly<{ type: "remove-selected" }>
+  | Readonly<{ type: "remove-piece"; pieceId: string }>
   | Readonly<{ type: "rotate"; direction: 1 | -1 }>
   | Readonly<{ type: "undo" }>
   | Readonly<{ type: "redo" }>
@@ -421,8 +423,23 @@ function reducer(state: AppState, action: Action): AppState {
       if (!state.selectedPieceId) {
         return state;
       }
+      if (!state.puzzle.board.placementsByPieceId[state.selectedPieceId]) {
+        return state;
+      }
       const board = removePiece(state.puzzle.board, state.selectedPieceId);
-      return withSavedPuzzle(state, { puzzle: { ...state.puzzle, board }, undoStack: [...state.undoStack, state.puzzle.board], redoStack: [] });
+      return withSavedPuzzle(state, { puzzle: { ...state.puzzle, board, cleared: false }, undoStack: [...state.undoStack, state.puzzle.board], redoStack: [] });
+    }
+    case "remove-piece": {
+      if (!state.puzzle.board.placementsByPieceId[action.pieceId]) {
+        return state;
+      }
+      const board = removePiece(state.puzzle.board, action.pieceId);
+      return withSavedPuzzle(state, {
+        puzzle: { ...state.puzzle, board, cleared: false },
+        selectedPieceId: action.pieceId,
+        undoStack: [...state.undoStack, state.puzzle.board],
+        redoStack: [],
+      });
     }
     case "rotate": {
       if (!state.selectedPieceId) {
@@ -639,22 +656,61 @@ function findForcedMove(puzzle: PuzzleDefinition, board: BoardState): Placement 
   return null;
 }
 
-function choosePlacementForCell(
+function choosePlacementPreviewForCell(
   puzzle: PuzzleDefinition,
   board: BoardState,
   piece: PuzzleDefinition["pieces"][number],
   orientationIndex: number,
   targetCellIndex: number,
-): Placement | null {
-  const legal = enumeratePlacements(puzzle, piece)
+): Readonly<{ placement: Placement; validation: PlacementValidation }> | null {
+  const candidates = enumeratePlacements(puzzle, piece)
     .filter((placement) => placement.orientationIndex === orientationIndex)
-    .filter((placement) => placement.cellIndices.includes(targetCellIndex))
-    .filter((placement) => canPlace(puzzle, board, placement).ok);
-  if (legal.length === 0) {
+    .filter((placement) => placement.cellIndices.includes(targetCellIndex));
+  if (candidates.length === 0) {
     return null;
   }
-  const exactAnchor = legal.find((placement) => placement.anchor.y * puzzle.width + placement.anchor.x === targetCellIndex);
-  return exactAnchor ?? legal[0];
+  const legal = candidates.filter((placement) => canPlace(puzzle, board, placement).ok);
+  const pool = legal.length > 0 ? legal : candidates;
+  const exactAnchor = pool.find((placement) => placement.anchor.y * puzzle.width + placement.anchor.x === targetCellIndex);
+  const placement = exactAnchor ?? pool[0];
+  return { placement, validation: canPlace(puzzle, board, placement) };
+}
+
+function hashString(value: string): number {
+  let hash = 2166136261;
+  for (let index = 0; index < value.length; index += 1) {
+    hash ^= value.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+  return hash >>> 0;
+}
+
+function pieceColorCss(piece: PieceInstance, seed: string): string {
+  const hash = hashString(`${seed}:${piece.id}:${piece.type}`);
+  const mixColors = ["white", "black", "var(--accent)", "var(--accent-2)"];
+  const mixColor = mixColors[hash % mixColors.length];
+  const mixWeight = 6 + ((hash >>> 3) % 10);
+  return `color-mix(in srgb, var(--piece-${piece.type}) ${100 - mixWeight}%, ${mixColor} ${mixWeight}%)`;
+}
+
+function pieceColorVariables(piece: PieceInstance, seed: string, prefix: "piece" | "preview-piece" = "piece"): React.CSSProperties {
+  return {
+    [`--${prefix}-color`]: pieceColorCss(piece, seed),
+    [`--${prefix}-border`]: `color-mix(in srgb, var(--piece-${piece.type}) 72%, black 28%)`,
+  } as React.CSSProperties;
+}
+
+function mergeCellStyle(placed: Placement | undefined, previewPiece: PieceInstance | null, seed: string): React.CSSProperties | undefined {
+  const style = {
+    ...(placed ? pieceColorVariables({ id: placed.pieceId, type: placed.pieceType }, seed) : {}),
+    ...(previewPiece ? pieceColorVariables(previewPiece, seed, "preview-piece") : {}),
+  };
+  return Object.keys(style).length > 0 ? style as React.CSSProperties : undefined;
+}
+
+function orientationForPiece(piece: PieceInstance, orientationIndex: number) {
+  const orientations = enumerateOrientations(piece.type);
+  return orientations[orientationIndex % orientations.length] ?? orientations[0];
 }
 
 export function App() {
@@ -700,11 +756,11 @@ export function App() {
   }, [state.puzzle.board]);
   const selectedPiece = puzzle.pieces.find((piece) => piece.id === state.selectedPieceId) ?? null;
   const selectedPlacementPreview = useMemo(() => {
-    if (!selectedPiece || hoverCell === null || state.puzzle.board.placementsByPieceId[selectedPiece.id]) {
+    if (!selectedPiece || hoverCell === null || state.puzzle.cleared) {
       return null;
     }
-    return choosePlacementForCell(puzzle, state.puzzle.board, selectedPiece, state.rotations[selectedPiece.id] ?? 0, hoverCell);
-  }, [hoverCell, puzzle, selectedPiece, state.puzzle.board, state.rotations]);
+    return choosePlacementPreviewForCell(puzzle, state.puzzle.board, selectedPiece, state.rotations[selectedPiece.id] ?? 0, hoverCell);
+  }, [hoverCell, puzzle, selectedPiece, state.puzzle.board, state.puzzle.cleared, state.rotations]);
   const language = state.save.settings.language ?? "en";
   const copy = COPY[language];
   const visibleUpgrades = GAME_CONFIG.upgrades.filter((upgrade) => {
@@ -836,12 +892,20 @@ export function App() {
     if (!selectedPiece) {
       return;
     }
-    const placement = choosePlacementForCell(puzzle, state.puzzle.board, selectedPiece, state.rotations[selectedPiece.id] ?? 0, index);
-    if (!placement) {
+    const preview = choosePlacementPreviewForCell(puzzle, state.puzzle.board, selectedPiece, state.rotations[selectedPiece.id] ?? 0, index);
+    if (!preview) {
       dispatch({ type: "toast", message: copy.noLegalPlacement });
       return;
     }
-    dispatch({ type: "place", placement });
+    dispatch({ type: "place", placement: preview.placement });
+  };
+
+  const handleCellContextMenu = (event: React.MouseEvent, index: number) => {
+    event.preventDefault();
+    const placed = placedByCell.get(index);
+    if (placed && !state.puzzle.cleared) {
+      dispatch({ type: "remove-piece", pieceId: placed.pieceId });
+    }
   };
 
   useEffect(() => {
@@ -887,7 +951,8 @@ export function App() {
       }
     }
   }
-  const previewCells = new Set(selectedPlacementPreview?.cellIndices ?? []);
+  const previewCells = new Set(selectedPlacementPreview?.placement.cellIndices ?? []);
+  const invalidPreview = Boolean(selectedPlacementPreview && !selectedPlacementPreview.validation.ok);
   const solverPreviewCells = new Set(state.solver.preview.flatMap((placement) => placement.cellIndices));
 
   const theme = state.save.settings.theme ?? "system";
@@ -911,23 +976,41 @@ export function App() {
           <h2>{copy.pieces}</h2>
           <div className="piece-tray">
             {puzzle.pieces.map((piece) => {
-              const placed = Boolean(state.puzzle.board.placementsByPieceId[piece.id]);
+              const placedPlacement = state.puzzle.board.placementsByPieceId[piece.id];
+              const placed = Boolean(placedPlacement);
+              const orientationIndex = placedPlacement?.orientationIndex ?? state.rotations[piece.id] ?? 0;
+              const orientation = orientationForPiece(piece, orientationIndex);
+              const occupiedMiniCells = new Set(orientation.cells.map((cell) => `${cell.x}:${cell.y}`));
               return (
                 <button
                   key={piece.id}
                   type="button"
                   data-testid={`piece-${piece.id}`}
-                  className={`piece-card ${state.selectedPieceId === piece.id ? "selected" : ""}`}
+                  className={`piece-card ${state.selectedPieceId === piece.id ? "selected" : ""} ${placed ? "placed-card" : ""}`}
+                  style={pieceColorVariables(piece, puzzle.seed)}
                   disabled={state.puzzle.cleared}
                   onClick={() => dispatch({ type: "select-piece", pieceId: piece.id })}
                   onContextMenu={(event) => {
                     event.preventDefault();
-                    dispatch({ type: "rotate", direction: 1 });
+                    if (placed) {
+                      dispatch({ type: "remove-piece", pieceId: piece.id });
+                    } else {
+                      dispatch({ type: "rotate", direction: 1 });
+                    }
                   }}
                 >
-                  <strong>{piece.type} #{piece.id.slice(1)}</strong>
-                  <span>{placed ? copy.placed : copy.ready}</span>
-                  <span>{copy.rotation} {state.puzzle.board.placementsByPieceId[piece.id]?.orientationIndex ?? state.rotations[piece.id] ?? 0}</span>
+                  <span className="piece-mini" data-testid={`piece-shape-${piece.id}`} aria-hidden="true">
+                    {Array.from({ length: 16 }, (_, miniIndex) => {
+                      const x = miniIndex % 4;
+                      const y = Math.floor(miniIndex / 4);
+                      return <span key={miniIndex} className={`piece-mini-cell ${occupiedMiniCells.has(`${x}:${y}`) ? "filled" : ""}`} />;
+                    })}
+                  </span>
+                  <span className="piece-info">
+                    <strong>{piece.type} #{piece.id.slice(1)}</strong>
+                    <span>{copy.rotation} {orientationIndex}</span>
+                  </span>
+                  <span className="piece-status">{placed ? copy.placed : copy.ready}</span>
                 </button>
               );
             })}
@@ -974,6 +1057,7 @@ export function App() {
             style={{ gridTemplateColumns: `repeat(${puzzle.width}, minmax(28px, 1fr))` }}
             role="grid"
             aria-label={copy.boardLabel}
+            onMouseLeave={() => setHoverCell(null)}
           >
             {Array.from({ length: puzzle.width * puzzle.height }, (_, index) => {
               const placed = placedByCell.get(index);
@@ -981,18 +1065,20 @@ export function App() {
               const preview = previewCells.has(index);
               const scanner = scannerCells.has(index);
               const solverPreview = solverPreviewCells.has(index);
+              const selectedPlacement = placed?.pieceId === state.selectedPieceId;
               return (
                 <button
                   key={index}
                   type="button"
                   data-testid={`cell-${index}`}
                   role="gridcell"
-                  className={`cell ${blocked ? "blocked" : ""} ${placed ? "placed" : ""} ${preview ? "preview" : ""} ${scanner ? "scanner" : ""} ${solverPreview ? "solver-preview" : ""}`}
-                  style={placed ? { "--piece-color": `var(--piece-${placed.pieceType})` } as React.CSSProperties : undefined}
+                  className={`cell ${blocked ? "blocked" : ""} ${placed ? "placed" : ""} ${selectedPlacement ? "selected-placement" : ""} ${preview && !invalidPreview ? "preview" : ""} ${preview && invalidPreview ? "invalid-preview" : ""} ${scanner ? "scanner" : ""} ${solverPreview ? "solver-preview" : ""}`}
+                  style={mergeCellStyle(placed, preview && selectedPiece ? selectedPiece : null, puzzle.seed)}
                   disabled={blocked || state.puzzle.cleared}
                   onMouseEnter={() => setHoverCell(index)}
                   onFocus={() => setHoverCell(index)}
                   onClick={() => handleCellClick(index)}
+                  onContextMenu={(event) => handleCellContextMenu(event, index)}
                 >
                   {placed?.pieceType ?? ""}
                 </button>

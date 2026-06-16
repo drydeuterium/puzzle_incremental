@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it } from "vitest";
 import { GAME_CONFIG } from "../game/config";
@@ -23,6 +23,36 @@ function seedKeyboardRotationPuzzle(): void {
         blockedCellIndices: [],
         pieces: [{ id: "p0", type: "I" }],
         difficulty: { score: 1, solutionNodes: 1, backtracks: 0, maxDepth: 1, forcedRatio: 1, initialBranching: 1, capped: false },
+      },
+      placements: [],
+      classification: "manual",
+      startedAt: now.toISOString(),
+      elapsedMilliseconds: 0,
+      cleared: false,
+    },
+  };
+  window.localStorage.setItem(SAVE_KEY, JSON.stringify(save));
+  window.localStorage.setItem(BACKUP_SAVE_KEY, JSON.stringify(save));
+}
+
+function seedTwoPiecePuzzle(): void {
+  const now = new Date("2026-01-01T00:00:00.000Z");
+  const base = createInitialSave(now);
+  const save = {
+    ...base,
+    settings: { ...base.settings, tutorialCompleted: true },
+    currentPuzzle: {
+      definition: {
+        id: "two-piece-fixture",
+        generatorVersion: GAME_CONFIG.generatorVersion,
+        tier: 0,
+        seed: "two-piece-fixture",
+        width: 4,
+        height: 4,
+        usableCellIndices: Array.from({ length: 16 }, (_, index) => index),
+        blockedCellIndices: [],
+        pieces: [{ id: "p0", type: "I" }, { id: "p1", type: "I" }],
+        difficulty: { score: 1, solutionNodes: 1, backtracks: 0, maxDepth: 2, forcedRatio: 1, initialBranching: 2, capped: false },
       },
       placements: [],
       classification: "manual",
@@ -96,6 +126,44 @@ describe("App", () => {
 
     await user.keyboard("{ArrowLeft}");
     expect(piece).toHaveTextContent("rot 0");
+  });
+
+  it("shows piece silhouettes in the tray", () => {
+    seedTwoPiecePuzzle();
+    render(<App />);
+
+    expect(screen.getByTestId("piece-shape-p0")).toBeInTheDocument();
+    expect(screen.getByTestId("piece-shape-p1")).toBeInTheDocument();
+  });
+
+  it("removes a placed piece from the board with right click", async () => {
+    seedTwoPiecePuzzle();
+    const user = userEvent.setup();
+    render(<App />);
+    const piece = screen.getByTestId("piece-p0");
+    const cell = screen.getByTestId("cell-0");
+
+    await user.click(piece);
+    await user.click(cell);
+    expect(piece).toHaveTextContent("Placed");
+
+    fireEvent.contextMenu(cell);
+    expect(piece).toHaveTextContent("Ready");
+    expect(cell).toHaveTextContent("");
+  });
+
+  it("marks overlapping placement previews as invalid", async () => {
+    seedTwoPiecePuzzle();
+    const user = userEvent.setup();
+    render(<App />);
+    const cell = screen.getByTestId("cell-0");
+
+    await user.click(screen.getByTestId("piece-p0"));
+    await user.click(cell);
+    await user.click(screen.getByTestId("piece-p1"));
+    await user.hover(cell);
+
+    expect(cell).toHaveClass("invalid-preview");
   });
 
   it("shows theme settings", async () => {
