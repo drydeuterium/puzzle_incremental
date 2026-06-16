@@ -101,7 +101,6 @@ export type UpgradeId =
   | "candidate-ordering"
   | "symmetry-pruning"
   | "dead-state-cache"
-  | "queue-capacity"
   | "parallel-solvers"
   | "tier-1"
   | "tier-2"

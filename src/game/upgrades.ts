@@ -84,10 +84,6 @@ export function solverOptionsFromUpgrades(levels: UpgradeState, visualization: S
   };
 }
 
-export function queueCapacity(levels: UpgradeState): number {
-  return levels["queue-capacity"] ?? 0;
-}
-
 export function parallelSessions(levels: UpgradeState): number {
   return Math.min(4, 1 + (levels["parallel-solvers"] ?? 0));
 }

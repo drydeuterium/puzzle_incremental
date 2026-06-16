@@ -5,7 +5,7 @@ import { calculateReward } from "../core/rewards";
 import { enumerateOrientations } from "../core/tetrominoes";
 import type { BoardState, ClearClassification, PieceInstance, Placement, PlacementValidation, PuzzleDefinition, SaveDataV1, SolverSessionId, SolverStats, UpgradeId } from "../core/types";
 import { GAME_CONFIG } from "../game/config";
-import { automatedRewardMultiplier, canPurchaseUpgrade, getUpgradePrice, isAutoSolverReady, isTierUnlocked, manualClearsForTier, nodesPerSecond, parallelSessions, queueCapacity, solverOptionsFromUpgrades, type PurchaseOutcome } from "../game/upgrades";
+import { automatedRewardMultiplier, canPurchaseUpgrade, getUpgradePrice, isAutoSolverReady, isTierUnlocked, manualClearsForTier, nodesPerSecond, parallelSessions, solverOptionsFromUpgrades, type PurchaseOutcome } from "../game/upgrades";
 import { createInitialSave } from "../persistence/schema";
 import { eraseSave, exportSave, importSave, loadSave, saveGame } from "../persistence/saveRepository";
 import { solveToEnd } from "../solver/incrementalSolver";
@@ -28,7 +28,7 @@ type SolverRun = Readonly<{
   preview: readonly Placement[];
 }>;
 
-type SolverQueuedSession = Readonly<{
+type SolverRunSession = Readonly<{
   sessionId: SolverSessionId;
   puzzle: PuzzleDefinition;
 }>;
@@ -38,11 +38,11 @@ type SolverUiState = Readonly<{
   sessionId: SolverSessionId | null;
   stats: SolverStats | null;
   preview: readonly Placement[];
-  queue: readonly PuzzleDefinition[];
   runs: readonly SolverRun[];
   activeSessions: number;
   completedSessionIds: readonly SolverSessionId[];
   autoNext: boolean;
+  autoTier: number;
 }>;
 
 type AppState = Readonly<{
@@ -94,13 +94,13 @@ type Action =
   | Readonly<{ type: "solver-paused" }>
   | Readonly<{ type: "solver-resumed" }>
   | Readonly<{ type: "solver-cancelled" }>
-  | Readonly<{ type: "enqueue"; puzzle: PuzzleDefinition }>
   | Readonly<{ type: "set-auto-next"; value: boolean }>
-  | Readonly<{ type: "queue-started"; sessions: readonly SolverQueuedSession[]; consumeQueueCount: number }>
-  | Readonly<{ type: "solver-queue-progress"; sessionId: SolverSessionId; stats: SolverStats; preview?: readonly Placement[] }>
-  | Readonly<{ type: "solver-queue-solved"; sessionId: SolverSessionId; puzzle: PuzzleDefinition; stats: SolverStats; solution: readonly Placement[] }>
-  | Readonly<{ type: "solver-queue-unsat"; sessionId: SolverSessionId; stats: SolverStats }>
-  | Readonly<{ type: "solver-queue-cancelled"; sessionId: SolverSessionId; stats: SolverStats }>
+  | Readonly<{ type: "set-auto-tier"; tier: number }>
+  | Readonly<{ type: "solver-runs-started"; sessions: readonly SolverRunSession[] }>
+  | Readonly<{ type: "solver-run-progress"; sessionId: SolverSessionId; stats: SolverStats; preview?: readonly Placement[] }>
+  | Readonly<{ type: "solver-run-solved"; sessionId: SolverSessionId; puzzle: PuzzleDefinition; stats: SolverStats; solution: readonly Placement[] }>
+  | Readonly<{ type: "solver-run-unsat"; sessionId: SolverSessionId; stats: SolverStats }>
+  | Readonly<{ type: "solver-run-cancelled"; sessionId: SolverSessionId; stats: SolverStats }>
   | Readonly<{ type: "import"; save: SaveDataV1 }>
   | Readonly<{ type: "erase"; save: SaveDataV1 }>
   | Readonly<{ type: "toast"; message: string | null }>;
@@ -116,7 +116,6 @@ const UPGRADE_NAMES_EN: Record<UpgradeId, string> = {
   "candidate-ordering": "Candidate Ordering",
   "symmetry-pruning": "Symmetry Pruning",
   "dead-state-cache": "Dead State Cache",
-  "queue-capacity": "Queue Capacity",
   "parallel-solvers": "Parallel Solvers",
   "tier-1": "Tier 1",
   "tier-2": "Tier 2",
@@ -136,7 +135,6 @@ const UPGRADE_NAMES_JA: Record<UpgradeId, string> = {
   "candidate-ordering": "候補順序付け",
   "symmetry-pruning": "対称性枝刈り",
   "dead-state-cache": "詰み状態キャッシュ",
-  "queue-capacity": "キュー容量",
   "parallel-solvers": "並列ソルバー",
   "tier-1": "Tier 1",
   "tier-2": "Tier 2",
@@ -178,7 +176,7 @@ const COPY = {
     backtracks: "Backtracks",
     theoryNodesPerSecond: "Theory nodes/s",
     depth: "Depth",
-    queue: "Queue",
+    autoTier: "Auto Tier",
     parallel: "Parallel",
     manualUnlock: "Manual unlock",
     solverPayout: "Solver payout",
@@ -190,8 +188,7 @@ const COPY = {
     pause: "Pause",
     resume: "Resume",
     cancel: "Cancel",
-    enqueue: "Enqueue",
-    startQueue: "Start Queue",
+    useCurrentTier: "Use current tier",
     upgrades: "Upgrades",
     level: "Level",
     next: "Next",
@@ -237,7 +234,7 @@ const COPY = {
       "Rotate the selected piece with the buttons, A/D, or the left/right arrow keys.",
       "Placed pieces can be selected on the board, moved by placing them again, or removed.",
       "Clears award Compute. Manual clears pay more; hints and automation lower the classification.",
-      "Spend Compute on upgrades to unlock higher tiers, hints, queues, and the Auto Solver.",
+      "Spend Compute on upgrades to unlock higher tiers, hints, parallel solvers, and the Auto Solver.",
     ],
     startPlaying: "Start Playing",
     later: "Later",
@@ -247,7 +244,6 @@ const COPY = {
     requiresAutoSolver: "Requires Auto Solver",
     autoSolverLocked: "Auto Solver is locked.",
     autoSolverManualLocked: (tier: number, count: number, required: number) => `Auto Solver requires ${required} manual clears on Tier ${tier} (${count}/${required}).`,
-    queueEmpty: "Queue is empty.",
     discardCurrentPuzzle: "Discard current puzzle?",
     contradictionFound: "This position cannot be completed.",
     contradictionClear: "No contradiction found.",
@@ -263,8 +259,8 @@ const COPY = {
     noForcedMove: "No forced move found.",
     autoSolverStarted: "Auto Solver started.",
     solverFailedUnsat: "Solver failed: unsat.",
-    queuedPuzzleFailed: "Queued puzzle failed.",
-    queueSolved: (tier: number, reward: number) => `Queue solved Tier ${tier}. +${reward}C`,
+    automatedPuzzleFailed: "Automated puzzle failed.",
+    automatedPuzzleSolved: (tier: number, reward: number) => `Auto solved Tier ${tier}. +${reward}C`,
     saveFailed: "Save failed.",
     saveImported: "Save imported.",
     saveErased: "Save erased.",
@@ -317,7 +313,7 @@ const COPY = {
     backtracks: "バックトラック",
     theoryNodesPerSecond: "理論 nodes/s",
     depth: "深さ",
-    queue: "キュー",
+    autoTier: "自動 Tier",
     parallel: "並列",
     manualUnlock: "手動解放",
     solverPayout: "報酬倍率",
@@ -329,8 +325,7 @@ const COPY = {
     pause: "一時停止",
     resume: "再開",
     cancel: "キャンセル",
-    enqueue: "キュー追加",
-    startQueue: "キュー開始",
+    useCurrentTier: "現在の Tier にする",
     upgrades: "アップグレード",
     level: "Lv",
     next: "次",
@@ -376,7 +371,7 @@ const COPY = {
       "選択中のピースはボタン、A/D、左右矢印キーで回転できます。",
       "配置済みピースは盤面上で選択し、置き直したり外したりできます。",
       "クリアすると Compute を獲得します。手動クリアほど報酬が高く、ヒントや自動化を使うと分類が下がります。",
-      "Compute を使って、高い Tier、ヒント、キュー、自動ソルバーを解放します。",
+      "Compute を使って、高い Tier、ヒント、並列ソルバー、自動ソルバーを解放します。",
     ],
     startPlaying: "始める",
     later: "あとで",
@@ -386,7 +381,6 @@ const COPY = {
     requiresAutoSolver: "自動ソルバーが必要",
     autoSolverLocked: "自動ソルバーは未解放です。",
     autoSolverManualLocked: (tier: number, count: number, required: number) => `自動ソルバーには Tier ${tier} の手動クリアが ${required} 回必要です（${count}/${required}）。`,
-    queueEmpty: "キューが空です。",
     discardCurrentPuzzle: "現在のパズルを破棄しますか?",
     contradictionFound: "この局面は完成できません。",
     contradictionClear: "矛盾は見つかりませんでした。",
@@ -402,8 +396,8 @@ const COPY = {
     noForcedMove: "強制手は見つかりませんでした。",
     autoSolverStarted: "自動ソルバーを開始しました。",
     solverFailedUnsat: "ソルバー失敗: 解なし。",
-    queuedPuzzleFailed: "キューのパズルに失敗しました。",
-    queueSolved: (tier: number, reward: number) => `Tier ${tier} のキューパズルを解決。+${reward}C`,
+    automatedPuzzleFailed: "自動パズルに失敗しました。",
+    automatedPuzzleSolved: (tier: number, reward: number) => `Tier ${tier} を自動解決。+${reward}C`,
     saveFailed: "セーブに失敗しました。",
     saveImported: "セーブを読み込みました。",
     saveErased: "セーブを削除しました。",
@@ -492,17 +486,17 @@ function saveFromState(state: AppState): SaveDataV1 {
   };
 }
 
-function createIdleSolverState(): SolverUiState {
+function createIdleSolverState(autoTier: number): SolverUiState {
   return {
     status: "idle",
     sessionId: null,
     stats: null,
     preview: [],
-    queue: [],
     runs: [],
     activeSessions: 0,
     completedSessionIds: [],
     autoNext: false,
+    autoTier,
   };
 }
 
@@ -533,7 +527,7 @@ function createInitialState(): AppState {
     settingsOpen: false,
     statsOpen: false,
     tutorialOpen: !save.settings.tutorialCompleted,
-    solver: createIdleSolverState(),
+    solver: createIdleSolverState(save.progression.selectedTier),
   };
 }
 
@@ -824,17 +818,16 @@ function reducer(state: AppState, action: Action): AppState {
           runs: trimSolverRuns(state.solver.runs.map((run) => isActiveSolverStatus(run.status) ? { ...run, status: "cancelled" } : run)),
         },
       };
-    case "enqueue":
-      return { ...state, solver: { ...state.solver, queue: [...state.solver.queue, action.puzzle] } };
     case "set-auto-next":
       return { ...state, solver: { ...state.solver, autoNext: action.value } };
-    case "queue-started":
+    case "set-auto-tier":
+      return { ...state, solver: { ...state.solver, autoTier: action.tier } };
+    case "solver-runs-started":
       return {
         ...state,
         solver: {
           ...state.solver,
           status: "running",
-          queue: state.solver.queue.slice(action.consumeQueueCount),
           runs: trimSolverRuns([
             ...state.solver.runs,
             ...action.sessions.map((session): SolverRun => ({
@@ -848,7 +841,7 @@ function reducer(state: AppState, action: Action): AppState {
           activeSessions: state.solver.activeSessions + action.sessions.length,
         },
       };
-    case "solver-queue-progress":
+    case "solver-run-progress":
       return {
         ...state,
         solver: {
@@ -860,7 +853,7 @@ function reducer(state: AppState, action: Action): AppState {
             : run),
         },
       };
-    case "solver-queue-solved": {
+    case "solver-run-solved": {
       if (state.solver.completedSessionIds.includes(action.sessionId)) {
         return state;
       }
@@ -898,10 +891,10 @@ function reducer(state: AppState, action: Action): AppState {
           activeSessions: remainingActiveSessions,
           completedSessionIds: [...state.solver.completedSessionIds, action.sessionId],
         },
-        toast: copyForSave(state.save).queueSolved(action.puzzle.tier, reward),
+        toast: copyForSave(state.save).automatedPuzzleSolved(action.puzzle.tier, reward),
       };
     }
-    case "solver-queue-unsat":
+    case "solver-run-unsat":
       return {
         ...state,
         solver: {
@@ -911,9 +904,9 @@ function reducer(state: AppState, action: Action): AppState {
           runs: trimSolverRuns(state.solver.runs.map((run) => run.sessionId === action.sessionId ? { ...run, status: "unsat", stats: action.stats } : run)),
           activeSessions: Math.max(0, state.solver.activeSessions - 1),
         },
-        toast: copyForSave(state.save).queuedPuzzleFailed,
+        toast: copyForSave(state.save).automatedPuzzleFailed,
       };
-    case "solver-queue-cancelled":
+    case "solver-run-cancelled":
       return {
         ...state,
         solver: {
@@ -1056,7 +1049,7 @@ function orientationForPiece(piece: PieceInstance, orientationIndex: number) {
 export function App() {
   const [state, dispatch] = useReducer(reducer, undefined, createInitialState);
   const workerRef = useRef<SolverWorkerClient | null>(null);
-  const queueSessionsRef = useRef<Map<SolverSessionId, PuzzleDefinition>>(new Map());
+  const solverSessionsRef = useRef<Map<SolverSessionId, PuzzleDefinition>>(new Map());
   const [hoverCell, setHoverCell] = useState<number | null>(null);
   const [eraseText, setEraseText] = useState("");
 
@@ -1107,43 +1100,43 @@ export function App() {
     const level = state.save.progression.upgradeLevels[upgrade.id] ?? 0;
     return !state.save.settings.hidePurchasedUpgrades || level < upgrade.maxLevel;
   });
-  const manualClearsThisTier = manualClearsForTier(state.save.statistics, puzzle.tier);
+  const manualClearsAutoTier = manualClearsForTier(state.save.statistics, state.solver.autoTier);
   const autoSolverRequiredManualClears = GAME_CONFIG.solver.manualClearsRequiredByTierForAutoSolver;
-  const autoSolverReady = isAutoSolverReady(state.save.progression.upgradeLevels, state.save.statistics, puzzle.tier);
+  const autoSolverReady = isAutoSolverReady(state.save.progression.upgradeLevels, state.save.statistics, state.solver.autoTier);
   const autoSolverLockMessage = (state.save.progression.upgradeLevels["auto-solver"] ?? 0) <= 0
     ? copy.autoSolverLocked
-    : copy.autoSolverManualLocked(puzzle.tier, manualClearsThisTier, autoSolverRequiredManualClears);
+    : copy.autoSolverManualLocked(state.solver.autoTier, manualClearsAutoTier, autoSolverRequiredManualClears);
   const solverLaneCapacity = Math.max(0, parallelSessions(state.save.progression.upgradeLevels) - state.solver.activeSessions);
   const solverPayoutMultiplier = automatedRewardMultiplier(state.save.progression.upgradeLevels);
 
   const handleWorkerMessage = useCallback((message: WorkerResponse) => {
     if (message.type === "STARTED") {
-      if (!queueSessionsRef.current.has(message.sessionId)) {
+      if (!solverSessionsRef.current.has(message.sessionId)) {
         dispatch({ type: "solver-started", sessionId: message.sessionId });
       }
     } else if (message.type === "PROGRESS") {
-      if (queueSessionsRef.current.has(message.sessionId)) {
+      if (solverSessionsRef.current.has(message.sessionId)) {
         if (message.stats.status === "cancelled") {
-          queueSessionsRef.current.delete(message.sessionId);
-          dispatch({ type: "solver-queue-cancelled", sessionId: message.sessionId, stats: message.stats });
+          solverSessionsRef.current.delete(message.sessionId);
+          dispatch({ type: "solver-run-cancelled", sessionId: message.sessionId, stats: message.stats });
         } else {
-          dispatch({ type: "solver-queue-progress", sessionId: message.sessionId, stats: message.stats, preview: message.placements });
+          dispatch({ type: "solver-run-progress", sessionId: message.sessionId, stats: message.stats, preview: message.placements });
         }
       } else {
         dispatch({ type: "solver-progress", sessionId: message.sessionId, stats: message.stats, preview: message.placements });
       }
     } else if (message.type === "SOLVED") {
-      const queuedPuzzle = queueSessionsRef.current.get(message.sessionId);
-      if (queuedPuzzle) {
-        queueSessionsRef.current.delete(message.sessionId);
-        dispatch({ type: "solver-queue-solved", sessionId: message.sessionId, puzzle: queuedPuzzle, stats: message.stats, solution: message.solution });
+      const automatedPuzzle = solverSessionsRef.current.get(message.sessionId);
+      if (automatedPuzzle) {
+        solverSessionsRef.current.delete(message.sessionId);
+        dispatch({ type: "solver-run-solved", sessionId: message.sessionId, puzzle: automatedPuzzle, stats: message.stats, solution: message.solution });
       } else {
         dispatch({ type: "solver-solved", sessionId: message.sessionId, stats: message.stats, solution: message.solution });
       }
     } else if (message.type === "UNSAT") {
-      if (queueSessionsRef.current.has(message.sessionId)) {
-        queueSessionsRef.current.delete(message.sessionId);
-        dispatch({ type: "solver-queue-unsat", sessionId: message.sessionId, stats: message.stats });
+      if (solverSessionsRef.current.has(message.sessionId)) {
+        solverSessionsRef.current.delete(message.sessionId);
+        dispatch({ type: "solver-run-unsat", sessionId: message.sessionId, stats: message.stats });
       } else {
         dispatch({ type: "solver-unsat", sessionId: message.sessionId, stats: message.stats });
       }
@@ -1159,19 +1152,19 @@ export function App() {
     return workerRef.current;
   }, [handleWorkerMessage]);
 
-  const startSolverRuns = useCallback((puzzles: readonly PuzzleDefinition[], consumeQueueCount = 0) => {
+  const startSolverRuns = useCallback((puzzles: readonly PuzzleDefinition[]) => {
     if (puzzles.length === 0) {
       return;
     }
     const worker = ensureWorker();
     const stamp = Date.now();
-    const sessions = puzzles.map((queuedPuzzle, index): SolverQueuedSession => {
-      const sessionId = `auto-${queuedPuzzle.tier}-${queuedPuzzle.seed}-${stamp}-${index}`;
-      queueSessionsRef.current.set(sessionId, queuedPuzzle);
-      worker.post({ type: "START", sessionId, puzzle: queuedPuzzle, options: solverOptionsFromUpgrades(state.save.progression.upgradeLevels, state.save.settings.visualization) });
-      return { sessionId, puzzle: queuedPuzzle };
+    const sessions = puzzles.map((automatedPuzzle, index): SolverRunSession => {
+      const sessionId = `auto-${automatedPuzzle.tier}-${automatedPuzzle.seed}-${stamp}-${index}`;
+      solverSessionsRef.current.set(sessionId, automatedPuzzle);
+      worker.post({ type: "START", sessionId, puzzle: automatedPuzzle, options: solverOptionsFromUpgrades(state.save.progression.upgradeLevels, state.save.settings.visualization) });
+      return { sessionId, puzzle: automatedPuzzle };
     });
-    dispatch({ type: "queue-started", sessions, consumeQueueCount });
+    dispatch({ type: "solver-runs-started", sessions });
   }, [ensureWorker, state.save.progression.upgradeLevels, state.save.settings.visualization]);
 
   useEffect(() => {
@@ -1180,11 +1173,18 @@ export function App() {
     }
     const stamp = Date.now();
     const puzzles = Array.from({ length: solverLaneCapacity }, (_, index) => generatePuzzle({
-      tier: state.save.progression.selectedTier,
-      seed: `auto-next-${state.save.progression.selectedTier}-${stamp}-${index}`,
+      tier: state.solver.autoTier,
+      seed: `auto-next-${state.solver.autoTier}-${stamp}-${index}`,
     }));
     startSolverRuns(puzzles);
-  }, [autoSolverReady, solverLaneCapacity, startSolverRuns, state.save.progression.selectedTier, state.solver.autoNext]);
+  }, [autoSolverReady, solverLaneCapacity, startSolverRuns, state.solver.autoNext, state.solver.autoTier]);
+
+  useEffect(() => {
+    if (state.solver.autoNext || state.solver.activeSessions > 0 || state.solver.autoTier === state.save.progression.selectedTier) {
+      return;
+    }
+    dispatch({ type: "set-auto-tier", tier: state.save.progression.selectedTier });
+  }, [state.save.progression.selectedTier, state.solver.activeSessions, state.solver.autoNext, state.solver.autoTier]);
 
   const startSolver = () => {
     if (!autoSolverReady) {
@@ -1196,7 +1196,7 @@ export function App() {
       return;
     }
     const stamp = Date.now();
-    startSolverRuns([generatePuzzle({ tier: state.save.progression.selectedTier, seed: `auto-${state.save.progression.selectedTier}-${stamp}` })]);
+    startSolverRuns([generatePuzzle({ tier: state.solver.autoTier, seed: `auto-${state.solver.autoTier}-${stamp}` })]);
   };
 
   const pauseOrResumeSolver = () => {
@@ -1223,19 +1223,6 @@ export function App() {
         workerRef.current.post({ type: "CANCEL", sessionId: run.sessionId });
       }
     }
-  };
-
-  const startQueue = () => {
-    if (!autoSolverReady) {
-      dispatch({ type: "toast", message: autoSolverLockMessage });
-      return;
-    }
-    const queued = state.solver.queue.slice(0, solverLaneCapacity);
-    if (queued.length === 0) {
-      dispatch({ type: "toast", message: copy.queueEmpty });
-      return;
-    }
-    startSolverRuns(queued, queued.length);
   };
 
   const startNewPuzzle = (daily: boolean) => {
@@ -1502,23 +1489,16 @@ export function App() {
               <span>{copy.backtracks}</span><strong>{formatNumber(state.solver.stats?.backtracks ?? 0, language)}</strong>
               <span>{copy.theoryNodesPerSecond}</span><strong>{formatNumber(nodesPerSecond(state.save.progression.upgradeLevels), language)}</strong>
               <span>{copy.depth}</span><strong>{state.solver.stats?.currentDepth ?? 0}</strong>
-              <span>{copy.queue}</span><strong>{state.solver.queue.length}/{queueCapacity(state.save.progression.upgradeLevels)}</strong>
+              <span>{copy.autoTier}</span><strong>{copy.tier} {state.solver.autoTier}</strong>
               <span>{copy.parallel}</span><strong>{parallelSessions(state.save.progression.upgradeLevels)}</strong>
-              <span>{copy.manualUnlock}</span><strong>{Math.min(manualClearsThisTier, autoSolverRequiredManualClears)}/{autoSolverRequiredManualClears}</strong>
+              <span>{copy.manualUnlock}</span><strong>{Math.min(manualClearsAutoTier, autoSolverRequiredManualClears)}/{autoSolverRequiredManualClears}</strong>
               <span>{copy.solverPayout}</span><strong>{solverPayoutMultiplier.toFixed(2)}x</strong>
             </div>
             <div className="controls solver-controls">
               <button type="button" onClick={startSolver} disabled={!autoSolverReady || solverLaneCapacity <= 0} title={autoSolverReady ? undefined : autoSolverLockMessage}>{copy.startSolver}</button>
               <button type="button" onClick={pauseOrResumeSolver} disabled={state.solver.activeSessions === 0}>{state.solver.status === "paused" ? copy.resume : copy.pause}</button>
               <button type="button" onClick={cancelSolver} disabled={state.solver.activeSessions === 0}>{copy.cancel}</button>
-              <button
-                type="button"
-                disabled={!autoSolverReady || queueCapacity(state.save.progression.upgradeLevels) <= state.solver.queue.length}
-                onClick={() => dispatch({ type: "enqueue", puzzle: generatePuzzle({ tier: state.save.progression.selectedTier, seed: `auto-${Date.now()}` }) })}
-              >
-                {copy.enqueue}
-              </button>
-              <button type="button" onClick={startQueue} disabled={state.solver.queue.length === 0 || !autoSolverReady || solverLaneCapacity <= 0}>{copy.startQueue}</button>
+              <button type="button" onClick={() => dispatch({ type: "set-auto-tier", tier: state.save.progression.selectedTier })} disabled={state.solver.autoTier === state.save.progression.selectedTier}>{copy.useCurrentTier}</button>
               <button
                 type="button"
                 className={state.solver.autoNext ? "selected" : ""}

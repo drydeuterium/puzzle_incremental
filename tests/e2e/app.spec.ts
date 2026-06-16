@@ -29,11 +29,11 @@ test("fresh start manual clear", async ({ page }) => {
           "forced-move": 0,
           "auto-solver": 0,
           "solver-throughput": 0,
+          "solver-payout": 0,
           "constraint-ordering": 0,
           "candidate-ordering": 0,
           "symmetry-pruning": 0,
           "dead-state-cache": 0,
-          "queue-capacity": 0,
           "parallel-solvers": 0,
           "tier-1": 0,
           "tier-2": 0,
@@ -70,6 +70,7 @@ test("fresh start manual clear", async ({ page }) => {
         assistedClears: 0,
         automatedClears: 0,
         clearsByTier: {},
+        manualClearsByTier: {},
         lifetimeSolverNodes: 0,
         lifetimeBacktracks: 0,
         automatedCellsSolved: 0,
@@ -89,7 +90,7 @@ test("fresh start manual clear", async ({ page }) => {
     await page.getByTestId(`piece-p${index}`).click();
     await page.getByTestId(`cell-${anchors[index]}`).click();
   }
-  await expect(page.getByText(/manual clear/i)).toBeVisible();
+  await expect(page.getByRole("dialog").getByText(/manual clear/i)).toBeVisible();
   await expect(page.getByTestId("compute")).not.toHaveText("0 C");
 });
 
