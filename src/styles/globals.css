@@ -158,17 +158,21 @@ button:disabled {
 
 @media (min-width: 1200px) {
   .layout {
-    grid-template-columns: minmax(420px, 520px) minmax(360px, 1fr) minmax(300px, 360px);
+    grid-template-columns: minmax(340px, 400px) minmax(360px, 1fr) minmax(300px, 360px);
   }
 
   .piece-tray {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 6px;
     overflow-x: hidden;
   }
 
   .piece-card {
-    grid-template-columns: 42px minmax(0, 1fr);
+    grid-template-columns: 34px minmax(0, 1fr);
     align-content: center;
+    gap: 6px;
+    min-height: 58px;
+    padding: 6px;
   }
 
   .piece-status {
@@ -235,6 +239,14 @@ button:disabled {
   border: 1px solid var(--piece-border);
   background: var(--piece-color);
   box-shadow: inset 0 0 0 1px rgb(255 255 255 / 22%);
+}
+
+@media (min-width: 1200px) {
+  .piece-mini {
+    width: 32px;
+    height: 32px;
+    gap: 1px;
+  }
 }
 
 .controls {
@@ -467,11 +479,40 @@ button:disabled {
   background: var(--surface);
 }
 
+@media (min-width: 1200px) {
+  .solver-grid {
+    grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr) auto;
+    gap: 5px 8px;
+    padding: 8px;
+  }
+
+  .solver-grid span,
+  .solver-grid strong {
+    font-size: 13px;
+  }
+
+  .solver-controls {
+    gap: 6px;
+  }
+
+  .solver-controls button {
+    min-height: 32px;
+    padding: 4px 6px;
+    font-size: 13px;
+  }
+}
+
 .side-panel {
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
   gap: 12px;
   overflow: hidden;
+}
+
+@media (min-width: 1200px) {
+  .side-panel {
+    gap: 8px;
+  }
 }
 
 .solver-section {
@@ -480,6 +521,10 @@ button:disabled {
 
 .solver-controls {
   grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.solver-controls button {
+  min-height: 32px;
 }
 
 .upgrade-section {
@@ -508,7 +553,7 @@ button:disabled {
 }
 
 .toggle-button {
-  min-height: 32px;
+  min-height: 30px;
 }
 
 .upgrade-list {
@@ -519,8 +564,8 @@ button:disabled {
 
 .upgrade {
   display: grid;
-  gap: 5px;
-  padding: 8px;
+  gap: 4px;
+  padding: 7px;
   border: 1px solid var(--line);
   border-radius: 6px;
   background: var(--surface);
