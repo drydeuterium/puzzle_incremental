@@ -139,6 +139,8 @@ button:disabled {
 }
 
 .piece-tray {
+  align-content: start;
+  grid-auto-rows: max-content;
   min-height: 0;
   overflow: auto;
   padding-right: 4px;
@@ -152,6 +154,27 @@ button:disabled {
   min-height: 66px;
   padding: 8px;
   text-align: left;
+}
+
+@media (min-width: 1200px) {
+  .layout {
+    grid-template-columns: minmax(420px, 520px) minmax(360px, 1fr) minmax(300px, 360px);
+  }
+
+  .piece-tray {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    overflow-x: hidden;
+  }
+
+  .piece-card {
+    grid-template-columns: 42px minmax(0, 1fr);
+    align-content: center;
+  }
+
+  .piece-status {
+    grid-column: 2;
+    justify-self: start;
+  }
 }
 
 .piece-card.placed-card {
