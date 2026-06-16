@@ -984,7 +984,7 @@ function pieceColorCss(piece: PieceInstance, seed: string): string {
   const hash = hashString(`${seed}:${piece.id}:${piece.type}`);
   const mixColors = ["white", "black", "var(--accent)", "var(--accent-2)"];
   const mixColor = mixColors[hash % mixColors.length];
-  const mixWeight = 6 + ((hash >>> 3) % 10);
+  const mixWeight = 10 + ((hash >>> 3) % 14);
   return `color-mix(in srgb, var(--piece-${piece.type}) ${100 - mixWeight}%, ${mixColor} ${mixWeight}%)`;
 }
 
