@@ -88,6 +88,7 @@ type Action =
   | Readonly<{ type: "set-high-contrast"; value: boolean }>
   | Readonly<{ type: "set-theme"; value: SaveDataV1["settings"]["theme"] }>
   | Readonly<{ type: "set-language"; value: SaveDataV1["settings"]["language"] }>
+  | Readonly<{ type: "set-notifications-enabled"; value: boolean }>
   | Readonly<{ type: "set-hide-purchased-upgrades"; value: boolean }>
   | Readonly<{ type: "set-tutorial-open"; value: boolean }>
   | Readonly<{ type: "complete-tutorial" }>
@@ -217,6 +218,7 @@ const COPY = {
     reduced: "Reduced",
     off: "Off",
     highContrast: "High contrast",
+    notifications: "Notifications",
     exportSave: "Export Save",
     importSave: "Import Save",
     eraseSave: "Erase Save",
@@ -355,6 +357,7 @@ const COPY = {
     reduced: "軽量",
     off: "オフ",
     highContrast: "高コントラスト",
+    notifications: "通知",
     exportSave: "セーブ出力",
     importSave: "セーブ読込",
     eraseSave: "セーブ削除",
@@ -759,6 +762,8 @@ function reducer(state: AppState, action: Action): AppState {
       return { ...state, save: { ...state.save, settings: { ...state.save.settings, theme: action.value } } };
     case "set-language":
       return { ...state, save: { ...state.save, settings: { ...state.save.settings, language: action.value } } };
+    case "set-notifications-enabled":
+      return { ...state, toast: null, save: { ...state.save, settings: { ...state.save.settings, notificationsEnabled: action.value } } };
     case "set-hide-purchased-upgrades":
       return { ...state, save: { ...state.save, settings: { ...state.save.settings, hidePurchasedUpgrades: action.value } } };
     case "set-tutorial-open":
@@ -1415,7 +1420,7 @@ export function App() {
         </div>
       </header>
       {state.persistentWarning && <div className="warning" role="alert">{state.persistentWarning}</div>}
-      {state.toast && <div className="toast" role="status" aria-live="polite" onClick={() => dispatch({ type: "toast", message: null })}>{state.toast}</div>}
+      {state.save.settings.notificationsEnabled && state.toast && <div className="toast" role="status" aria-live="polite" onClick={() => dispatch({ type: "toast", message: null })}>{state.toast}</div>}
 
       <section className="layout">
         <aside className="panel">
@@ -1646,6 +1651,7 @@ export function App() {
               </select>
             </label>
             <label><input type="checkbox" checked={state.save.settings.highContrast} onChange={(event) => dispatch({ type: "set-high-contrast", value: event.target.checked })} /> {copy.highContrast}</label>
+            <label><input type="checkbox" checked={state.save.settings.notificationsEnabled} onChange={(event) => dispatch({ type: "set-notifications-enabled", value: event.target.checked })} /> {copy.notifications}</label>
             <button type="button" onClick={() => {
               const blob = new Blob([exportSave(saveFromState(state))], { type: "application/json" });
               const url = URL.createObjectURL(blob);

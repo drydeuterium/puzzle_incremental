@@ -116,6 +116,7 @@ export type UserSettings = Readonly<{
   highContrast: boolean;
   theme: "system" | "light" | "dark";
   language: "en" | "ja";
+  notificationsEnabled: boolean;
   tutorialCompleted: boolean;
   hidePurchasedUpgrades: boolean;
 }>;

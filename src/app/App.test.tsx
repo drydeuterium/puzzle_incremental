@@ -212,8 +212,25 @@ describe("App", () => {
     await user.click(screen.getByRole("button", { name: "Start Playing" }));
     await user.click(screen.getByText("Settings"));
     expect(screen.getByLabelText("Theme")).toHaveValue("system");
+    expect(screen.getByLabelText("Notifications")).toBeChecked();
     await user.selectOptions(screen.getByLabelText("Theme"), "dark");
     expect(screen.getByLabelText("Theme")).toHaveValue("dark");
+  });
+
+  it("can hide toast notifications", async () => {
+    seedTwoPiecePuzzle();
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.click(screen.getByText("Settings"));
+    await user.click(screen.getByLabelText("Notifications"));
+    await user.click(screen.getByText("Close"));
+    await user.click(screen.getByTestId("piece-p0"));
+    await user.click(screen.getByTestId("cell-0"));
+    await user.click(screen.getByTestId("piece-p1"));
+    await user.click(screen.getByTestId("cell-0"));
+
+    expect(screen.queryByRole("status")).not.toBeInTheDocument();
   });
 
   it("switches visible settings copy to Japanese", async () => {

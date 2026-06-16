@@ -14,6 +14,7 @@ export function defaultSettings(): UserSettings {
     highContrast: false,
     theme: "system",
     language: "en",
+    notificationsEnabled: true,
     tutorialCompleted: false,
     hidePurchasedUpgrades: true,
   };
@@ -121,6 +122,7 @@ export function validateSaveData(value: unknown): SaveDataV1 | null {
       highContrast: typeof settings.highContrast === "boolean" ? settings.highContrast : defaults.highContrast,
       theme: isTheme(settings.theme) ? settings.theme : defaults.theme,
       language: isLanguage(settings.language) ? settings.language : defaults.language,
+      notificationsEnabled: typeof settings.notificationsEnabled === "boolean" ? settings.notificationsEnabled : defaults.notificationsEnabled,
       tutorialCompleted: typeof settings.tutorialCompleted === "boolean" ? settings.tutorialCompleted : defaults.tutorialCompleted,
       hidePurchasedUpgrades: typeof settings.hidePurchasedUpgrades === "boolean" ? settings.hidePurchasedUpgrades : defaults.hidePurchasedUpgrades,
     },
