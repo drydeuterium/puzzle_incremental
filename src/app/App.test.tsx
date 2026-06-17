@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { GAME_CONFIG } from "../game/config";
@@ -155,6 +155,26 @@ function seedPurchasedUpgrade(): void {
   window.localStorage.setItem(BACKUP_SAVE_KEY, JSON.stringify(save));
 }
 
+function seedPurchasedFeatureUpgrades(): void {
+  const now = new Date("2026-01-01T00:00:00.000Z");
+  const base = createInitialSave(now);
+  const save = {
+    ...base,
+    settings: { ...base.settings, language: "ja", tutorialCompleted: true },
+    progression: {
+      ...base.progression,
+      upgradeLevels: {
+        ...base.progression.upgradeLevels,
+        "placement-scanner": 1,
+        "contradiction-detector": 1,
+        "forced-move": 1,
+      },
+    },
+  };
+  window.localStorage.setItem(SAVE_KEY, JSON.stringify(save));
+  window.localStorage.setItem(BACKUP_SAVE_KEY, JSON.stringify(save));
+}
+
 function seedContradictionDetector(): void {
   const now = new Date("2026-01-01T00:00:00.000Z");
   const base = createInitialSave(now);
@@ -212,6 +232,10 @@ function seedAutoSolverProgress(manualClears: number): void {
   };
   window.localStorage.setItem(SAVE_KEY, JSON.stringify(save));
   window.localStorage.setItem(BACKUP_SAVE_KEY, JSON.stringify(save));
+}
+
+function upgradeNamesInPanel(panel: HTMLElement): string[] {
+  return Array.from(panel.querySelectorAll(".upgrade-header strong")).map((element) => element.textContent ?? "");
 }
 
 describe("App", () => {
@@ -443,11 +467,44 @@ describe("App", () => {
     expect(screen.getByText("Placement Scanner")).toBeInTheDocument();
   });
 
-  it("shows clearer solver efficiency upgrade names and descriptions", () => {
+  it("groups upgrades into tabs and sorts the default tab by lowest price", async () => {
+    const user = userEvent.setup();
     render(<App />);
 
-    expect(screen.getByText("ソルバ効率化 #1")).toBeInTheDocument();
-    expect(screen.getByText("空きマスの候補が少ない場所から調べ、分岐を減らします。")).toBeInTheDocument();
+    const featurePanel = screen.getByRole("tabpanel", { name: "機能" });
+    expect(upgradeNamesInPanel(featurePanel)).toEqual(["配置スキャナー", "矛盾検出", "強制手"]);
+    expect(within(featurePanel).queryByText("Tier 1")).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("tab", { name: "Tier" }));
+    const tierPanel = screen.getByRole("tabpanel", { name: "Tier" });
+    expect(within(tierPanel).getByText("Tier 1")).toBeInTheDocument();
+    expect(within(tierPanel).queryByText("自動ソルバー")).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("tab", { name: "ソルバ" }));
+    const solverPanel = screen.getByRole("tabpanel", { name: "ソルバ" });
+    expect(upgradeNamesInPanel(solverPanel).slice(0, 3)).toEqual(["ソルバー処理速度", "ソルバー報酬", "自動ソルバー"]);
+  });
+
+  it("can hide completed upgrade tabs", async () => {
+    seedPurchasedFeatureUpgrades();
+    const user = userEvent.setup();
+    render(<App />);
+
+    expect(screen.getByRole("tab", { name: "機能" })).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "完了タブ非表示: オフ" }));
+    expect(screen.queryByRole("tab", { name: "機能" })).not.toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Tier" })).toHaveAttribute("aria-selected", "true");
+    expect(within(screen.getByRole("tabpanel", { name: "Tier" })).getByText("Tier 1")).toBeInTheDocument();
+  });
+
+  it("shows clearer solver efficiency upgrade names and descriptions", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.click(screen.getByRole("tab", { name: "ソルバ" }));
+    const solverPanel = screen.getByRole("tabpanel", { name: "ソルバ" });
+    expect(within(solverPanel).getByText("ソルバ効率化 #1")).toBeInTheDocument();
+    expect(within(solverPanel).getByText("空きマスの候補が少ない場所から調べ、分岐を減らします。")).toBeInTheDocument();
   });
 
   it("requires five manual clears on the current tier before auto solver starts", () => {

@@ -197,6 +197,7 @@ button:disabled {
 .piece-card.selected,
 .tier-switcher .selected,
 .toggle-button.selected,
+.upgrade-tab.selected,
 .solver-controls .selected {
   border-color: var(--accent);
   box-shadow: inset 0 0 0 2px var(--accent);
@@ -572,7 +573,7 @@ button:disabled {
 
 .upgrade-section {
   display: grid;
-  grid-template-rows: auto auto minmax(0, 1fr);
+  grid-template-rows: auto auto auto minmax(0, 1fr);
   gap: 8px;
   min-height: 0;
   overflow: hidden;
@@ -599,13 +600,58 @@ button:disabled {
   min-height: 30px;
 }
 
+.upgrade-toolbar {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.upgrade-toolbar .toggle-button {
+  min-width: 0;
+  padding: 4px 6px;
+}
+
+.upgrade-sort {
+  display: grid;
+  grid-column: 1 / -1;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 8px;
+  align-items: center;
+}
+
+.upgrade-sort span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.upgrade-sort select {
+  min-width: 0;
+  min-height: 30px;
+}
+
+.upgrade-tabs {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.upgrade-tab {
+  min-width: 0;
+  min-height: 30px;
+  padding: 4px 6px;
+}
+
 .upgrade-list {
+  align-content: start;
+  grid-auto-rows: max-content;
   min-height: 0;
   overflow-y: auto;
   padding-right: 4px;
 }
 
 .upgrade {
+  align-self: start;
   display: grid;
   gap: 4px;
   padding: 7px;

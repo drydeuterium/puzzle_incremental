@@ -39,6 +39,9 @@ type SolverRunSession = Readonly<{
   puzzle: PuzzleDefinition;
 }>;
 
+type UpgradeTabId = "feature" | "tier" | "solver";
+type UpgradeSortOrder = "price-asc" | "config";
+
 type SolverUiState = Readonly<{
   status: SolverStats["status"];
   sessionId: SolverSessionId | null;
@@ -68,6 +71,33 @@ type AppState = Readonly<{
   tutorialOpen: boolean;
   solver: SolverUiState;
 }>;
+
+const UPGRADE_TABS: readonly UpgradeTabId[] = ["feature", "tier", "solver"];
+
+const UPGRADE_TAB_BY_ID: Record<UpgradeId, UpgradeTabId> = {
+  "placement-scanner": "feature",
+  "contradiction-detector": "feature",
+  "forced-move": "feature",
+  "auto-solver": "solver",
+  "solver-throughput": "solver",
+  "solver-payout": "solver",
+  "constraint-ordering": "solver",
+  "candidate-ordering": "solver",
+  "symmetry-pruning": "solver",
+  "dead-state-cache": "solver",
+  "parallel-solvers": "solver",
+  "tier-1": "tier",
+  "tier-2": "tier",
+  "tier-3": "tier",
+  "tier-4": "tier",
+  "tier-5": "tier",
+  "tier-6": "tier",
+  "tier-7": "tier",
+  "tier-8": "tier",
+  "tier-9": "tier",
+};
+
+const UPGRADE_ORDER_INDEX = new Map<UpgradeId, number>(GAME_CONFIG.upgrades.map((upgrade, index) => [upgrade.id, index]));
 
 type Action =
   | Readonly<{ type: "select-piece"; pieceId: string | null }>
@@ -259,6 +289,15 @@ const COPY = {
     next: "Next",
     buy: "Buy",
     hidePurchased: "Hide purchased",
+    hideCompletedTabs: "Hide complete tabs",
+    upgradeSort: "Sort",
+    upgradeSortPriceAsc: "Lowest price",
+    upgradeSortConfig: "Default order",
+    upgradeTabs: {
+      feature: "Function",
+      tier: "Tier",
+      solver: "Solver",
+    },
     noVisibleUpgrades: "All purchased upgrades are hidden.",
     clear: "Clear",
     clearSummary: (classification: string, reward: number) => `${classification} clear, +${reward}C.`,
@@ -404,6 +443,15 @@ const COPY = {
     next: "次",
     buy: "購入",
     hidePurchased: "購入済み非表示",
+    hideCompletedTabs: "完了タブ非表示",
+    upgradeSort: "並び順",
+    upgradeSortPriceAsc: "価格の安い順",
+    upgradeSortConfig: "基本順",
+    upgradeTabs: {
+      feature: "機能",
+      tier: "Tier",
+      solver: "ソルバ",
+    },
     noVisibleUpgrades: "購入済みアップグレードを非表示にしています。",
     clear: "クリア",
     clearSummary: (classification: string, reward: number) => `${classification} クリア、+${reward}C。`,
@@ -637,6 +685,33 @@ function copyForSave(save: SaveDataV1): AppCopy {
 
 function upgradeName(copy: AppCopy, id: UpgradeId): string {
   return copy.upgradeNames[id];
+}
+
+function upgradeTabFor(id: UpgradeId): UpgradeTabId {
+  return UPGRADE_TAB_BY_ID[id];
+}
+
+function isUpgradeComplete(levels: SaveDataV1["progression"]["upgradeLevels"], id: UpgradeId): boolean {
+  const upgrade = GAME_CONFIG.upgrades.find((entry) => entry.id === id);
+  return Boolean(upgrade && (levels[id] ?? 0) >= upgrade.maxLevel);
+}
+
+function isUpgradeTabComplete(levels: SaveDataV1["progression"]["upgradeLevels"], tab: UpgradeTabId): boolean {
+  const upgrades = GAME_CONFIG.upgrades.filter((upgrade) => upgradeTabFor(upgrade.id) === tab);
+  return upgrades.length > 0 && upgrades.every((upgrade) => isUpgradeComplete(levels, upgrade.id));
+}
+
+function compareUpgradeOrder(a: (typeof GAME_CONFIG.upgrades)[number], b: (typeof GAME_CONFIG.upgrades)[number]): number {
+  return (UPGRADE_ORDER_INDEX.get(a.id) ?? 0) - (UPGRADE_ORDER_INDEX.get(b.id) ?? 0);
+}
+
+function compareUpgradePrice(levels: SaveDataV1["progression"]["upgradeLevels"], a: (typeof GAME_CONFIG.upgrades)[number], b: (typeof GAME_CONFIG.upgrades)[number]): number {
+  const priceDiff = getUpgradePrice(a.id, levels[a.id] ?? 0) - getUpgradePrice(b.id, levels[b.id] ?? 0);
+  return priceDiff !== 0 ? priceDiff : compareUpgradeOrder(a, b);
+}
+
+function sortUpgrades(levels: SaveDataV1["progression"]["upgradeLevels"], upgrades: readonly (typeof GAME_CONFIG.upgrades)[number][], order: UpgradeSortOrder): (typeof GAME_CONFIG.upgrades)[number][] {
+  return [...upgrades].sort((a, b) => order === "price-asc" ? compareUpgradePrice(levels, a, b) : compareUpgradeOrder(a, b));
 }
 
 function purchaseReason(copy: AppCopy, outcome: PurchaseOutcome): string {
@@ -1367,6 +1442,9 @@ export function App() {
   const [eraseText, setEraseText] = useState("");
   const [computePerSecond, setComputePerSecond] = useState(0);
   const [panelLayout, setPanelLayout] = useState<PanelLayout>(loadPanelLayout);
+  const [activeUpgradeTab, setActiveUpgradeTab] = useState<UpgradeTabId>("feature");
+  const [upgradeSortOrder, setUpgradeSortOrder] = useState<UpgradeSortOrder>("price-asc");
+  const [hideCompletedUpgradeTabs, setHideCompletedUpgradeTabs] = useState(false);
   const [boardViewportRef, boardViewportSize] = useMeasuredElement<HTMLDivElement>();
 
   useEffect(() => {
@@ -1464,10 +1542,22 @@ export function App() {
   }, [hoverCell, puzzle, selectedPiece, state.puzzle.board, state.puzzle.cleared, state.rotations]);
   const language = state.save.settings.language ?? "en";
   const copy = COPY[language];
-  const visibleUpgrades = GAME_CONFIG.upgrades.filter((upgrade) => {
-    const level = state.save.progression.upgradeLevels[upgrade.id] ?? 0;
-    return !state.save.settings.hidePurchasedUpgrades || level < upgrade.maxLevel;
-  });
+  const upgradeLevels = state.save.progression.upgradeLevels;
+  const visibleUpgradeTabs = UPGRADE_TABS.filter((tab) => !hideCompletedUpgradeTabs || !isUpgradeTabComplete(upgradeLevels, tab));
+  const selectedUpgradeTab = visibleUpgradeTabs.includes(activeUpgradeTab)
+    ? activeUpgradeTab
+    : visibleUpgradeTabs[0] ?? null;
+  const visibleUpgrades = selectedUpgradeTab
+    ? sortUpgrades(
+      upgradeLevels,
+      GAME_CONFIG.upgrades.filter((upgrade) => {
+        const level = upgradeLevels[upgrade.id] ?? 0;
+        return upgradeTabFor(upgrade.id) === selectedUpgradeTab
+          && (!state.save.settings.hidePurchasedUpgrades || level < upgrade.maxLevel);
+      }),
+      upgradeSortOrder,
+    )
+    : [];
   const manualClearsAutoTier = manualClearsForTier(state.save.statistics, state.solver.autoTier);
   const autoSolverRequiredManualClears = GAME_CONFIG.solver.manualClearsRequiredByTierForAutoSolver;
   const autoSolverReady = isAutoSolverReady(state.save.progression.upgradeLevels, state.save.statistics, state.solver.autoTier);
@@ -1975,14 +2065,44 @@ export function App() {
               <h2>{copy.upgrades}</h2>
               <span>{formatNumber(state.save.economy.compute, language)} C</span>
             </div>
-            <button
-              type="button"
-              className={`toggle-button ${state.save.settings.hidePurchasedUpgrades ? "selected" : ""}`}
-              onClick={() => dispatch({ type: "set-hide-purchased-upgrades", value: !state.save.settings.hidePurchasedUpgrades })}
-            >
-              {copy.hidePurchased}: {state.save.settings.hidePurchasedUpgrades ? copy.on : copy.off}
-            </button>
-            <div className="upgrade-list">
+            <div className="upgrade-toolbar">
+              <button
+                type="button"
+                className={`toggle-button ${state.save.settings.hidePurchasedUpgrades ? "selected" : ""}`}
+                onClick={() => dispatch({ type: "set-hide-purchased-upgrades", value: !state.save.settings.hidePurchasedUpgrades })}
+              >
+                {copy.hidePurchased}: {state.save.settings.hidePurchasedUpgrades ? copy.on : copy.off}
+              </button>
+              <button
+                type="button"
+                className={`toggle-button ${hideCompletedUpgradeTabs ? "selected" : ""}`}
+                onClick={() => setHideCompletedUpgradeTabs((value) => !value)}
+              >
+                {copy.hideCompletedTabs}: {hideCompletedUpgradeTabs ? copy.on : copy.off}
+              </button>
+              <label className="upgrade-sort">
+                <span>{copy.upgradeSort}</span>
+                <select value={upgradeSortOrder} onChange={(event) => setUpgradeSortOrder(event.target.value as UpgradeSortOrder)}>
+                  <option value="price-asc">{copy.upgradeSortPriceAsc}</option>
+                  <option value="config">{copy.upgradeSortConfig}</option>
+                </select>
+              </label>
+            </div>
+            <div className="upgrade-tabs" role="tablist" aria-label={copy.upgrades}>
+              {visibleUpgradeTabs.map((tab) => (
+                <button
+                  key={tab}
+                  type="button"
+                  role="tab"
+                  aria-selected={selectedUpgradeTab === tab}
+                  className={`upgrade-tab ${selectedUpgradeTab === tab ? "selected" : ""}`}
+                  onClick={() => setActiveUpgradeTab(tab)}
+                >
+                  {copy.upgradeTabs[tab]}
+                </button>
+              ))}
+            </div>
+            <div className="upgrade-list" role="tabpanel" aria-label={selectedUpgradeTab ? copy.upgradeTabs[selectedUpgradeTab] : copy.upgrades}>
               {visibleUpgrades.length === 0 && <p className="empty-state">{copy.noVisibleUpgrades}</p>}
               {visibleUpgrades.map((upgrade) => {
                 const level = state.save.progression.upgradeLevels[upgrade.id] ?? 0;
