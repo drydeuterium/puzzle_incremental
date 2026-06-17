@@ -17,7 +17,7 @@ test("fresh start manual clear", async ({ page }) => {
     ];
     const save = {
       schemaVersion: 1,
-      gameConfigVersion: "1.4.1-horizontal-boards",
+      gameConfigVersion: "1.5.0-economy-rebalance",
       generatorVersion: 6,
       createdAt: now,
       updatedAt: now,

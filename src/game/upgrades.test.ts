@@ -27,10 +27,11 @@ describe("upgrades", () => {
       "tier-3": 1,
     };
     expect(initialUpgradeState()["tier-9"]).toBe(0);
-    expect(canPurchaseUpgrade(levels, 4500, "tier-4").ok).toBe(true);
+    expect(canPurchaseUpgrade(levels, 9500, "tier-4").ok).toBe(true);
     expect(isTierUnlocked({ ...levels, "tier-4": 1 }, 4)).toBe(true);
-    expect(canPurchaseUpgrade({ ...levels, "tier-4": 1 }, 7500, "tier-5").ok).toBe(true);
-    expect(canPurchaseUpgrade({ ...levels, "tier-4": 1, "tier-5": 1 }, 12_000, "tier-6").ok).toBe(true);
+    expect(canPurchaseUpgrade({ ...levels, "tier-4": 1 }, 19_000, "tier-5").ok).toBe(true);
+    expect(canPurchaseUpgrade({ ...levels, "tier-4": 1, "tier-5": 1 }, 42_000, "tier-6").ok).toBe(true);
+    expect(canPurchaseUpgrade({ ...levels, "tier-4": 1, "tier-5": 1, "tier-6": 1, "tier-7": 1, "tier-8": 1 }, 420_000, "tier-9").ok).toBe(true);
   });
 
   it("uses slower base solver speed and requires manual clears per tier", () => {

@@ -137,4 +137,12 @@ describe("generation and rewards", () => {
     expect(calculateReward(puzzle, "manual")).toBeGreaterThan(calculateReward(puzzle, "assisted"));
     expect(calculateReward(puzzle, "assisted")).toBeGreaterThan(calculateReward(puzzle, "automated"));
   });
+
+  it("scales rewards strongly by tier", () => {
+    const tier0 = generatePuzzle({ tier: 0, seed: "reward-tier-0" });
+    const tier9 = generatePuzzle({ tier: 9, seed: "reward-tier-9" });
+    expect(calculateReward(tier0, "manual")).toBeLessThan(400);
+    expect(calculateReward(tier9, "manual")).toBeGreaterThan(calculateReward(tier0, "manual") * 100);
+    expect(calculateReward(tier9, "automated")).toBeGreaterThan(calculateReward(tier0, "automated") * 100);
+  });
 });
