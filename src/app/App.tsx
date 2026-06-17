@@ -49,8 +49,8 @@ type PendingConfirmation =
   | Readonly<{ type: "switch-tier"; tier: number; timestamp: number }>;
 
 const SOLVER_LANE_SLOT_COUNT = 4;
-const SOLVER_LANE_MIN_SESSION_MS = 1600;
-const SOLVER_LANE_PREVIEW_UPDATE_MS = 750;
+const SOLVER_LANE_MIN_SESSION_MS = 1000;
+const SOLVER_LANE_PREVIEW_UPDATE_MS = 250;
 const SOLVER_LANE_SESSION_STAGGER_MS = 140;
 
 type SolverUiState = Readonly<{
