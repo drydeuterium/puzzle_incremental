@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
 import { applyPlacement, boardFromPlacements, boardPlacements, canPlace, createEmptyBoard, createPlacement, enumeratePlacements, isSolved, removePiece } from "../core/board";
+import { indexToCell } from "../core/coordinates";
 import { generatePuzzle, dailySeed } from "../core/generator";
 import { calculateReward } from "../core/rewards";
 import { enumerateOrientations, TETROMINO_TYPES } from "../core/tetrominoes";
@@ -59,6 +60,7 @@ type AppState = Readonly<{
   redoStack: readonly BoardState[];
   scannerEnabled: boolean;
   toast: string | null;
+  inspectionMessage: string | null;
   persistentWarning: string | null;
   clearResult: Readonly<{ reward: number; classification: ClearClassification }> | null;
   settingsOpen: boolean;
@@ -82,6 +84,8 @@ type Action =
   | Readonly<{ type: "scanner" }>
   | Readonly<{ type: "forced-move"; placement: Placement | null }>
   | Readonly<{ type: "contradiction"; message: string }>
+  | Readonly<{ type: "dismiss-inspection-message" }>
+  | Readonly<{ type: "dismiss-clear-result" }>
   | Readonly<{ type: "set-settings-open"; value: boolean }>
   | Readonly<{ type: "set-stats-open"; value: boolean }>
   | Readonly<{ type: "set-visualization"; value: SaveDataV1["settings"]["visualization"] }>
@@ -118,10 +122,10 @@ const UPGRADE_NAMES_EN: Record<UpgradeId, string> = {
   "auto-solver": "Auto Solver",
   "solver-throughput": "Solver Throughput",
   "solver-payout": "Solver Payout",
-  "constraint-ordering": "Constraint Ordering",
-  "candidate-ordering": "Candidate Ordering",
-  "symmetry-pruning": "Symmetry Pruning",
-  "dead-state-cache": "Dead State Cache",
+  "constraint-ordering": "Solver Efficiency #1",
+  "candidate-ordering": "Solver Efficiency #3",
+  "symmetry-pruning": "Solver Efficiency #2",
+  "dead-state-cache": "Solver Efficiency #4",
   "parallel-solvers": "Parallel Solvers",
   "tier-1": "Tier 1",
   "tier-2": "Tier 2",
@@ -141,10 +145,10 @@ const UPGRADE_NAMES_JA: Record<UpgradeId, string> = {
   "auto-solver": "自動ソルバー",
   "solver-throughput": "ソルバー処理速度",
   "solver-payout": "ソルバー報酬",
-  "constraint-ordering": "制約順序付け",
-  "candidate-ordering": "候補順序付け",
-  "symmetry-pruning": "対称性枝刈り",
-  "dead-state-cache": "詰み状態キャッシュ",
+  "constraint-ordering": "ソルバ効率化 #1",
+  "candidate-ordering": "ソルバ効率化 #3",
+  "symmetry-pruning": "ソルバ効率化 #2",
+  "dead-state-cache": "ソルバ効率化 #4",
   "parallel-solvers": "並列ソルバー",
   "tier-1": "Tier 1",
   "tier-2": "Tier 2",
@@ -155,6 +159,52 @@ const UPGRADE_NAMES_JA: Record<UpgradeId, string> = {
   "tier-7": "Tier 7",
   "tier-8": "Tier 8",
   "tier-9": "Tier 9",
+};
+
+const UPGRADE_DESCRIPTIONS_EN: Record<UpgradeId, string> = {
+  "placement-scanner": "Highlights cells where the selected piece has at least one legal placement.",
+  "contradiction-detector": "Checks whether the current board can still be solved. Using it marks the clear as assisted.",
+  "forced-move": "Places a move that is forced in the current position, if one exists.",
+  "auto-solver": "Unlocks background solver puzzles after five manual clears on that tier.",
+  "solver-throughput": "Increases the work rate budget used by automated solver runs.",
+  "solver-payout": "Raises automated clear rewards up to the configured cap.",
+  "constraint-ordering": "Tries the most constrained empty cells first to reduce branching.",
+  "candidate-ordering": "Reorders candidate placements so dead ends are found earlier.",
+  "symmetry-pruning": "Skips equivalent symmetric branches when possible.",
+  "dead-state-cache": "Remembers failed partial boards to avoid solving the same dead state again.",
+  "parallel-solvers": "Adds one background solver lane per level.",
+  "tier-1": "Unlocks Tier 1 puzzles.",
+  "tier-2": "Unlocks Tier 2 puzzles.",
+  "tier-3": "Unlocks Tier 3 puzzles.",
+  "tier-4": "Unlocks Tier 4 puzzles.",
+  "tier-5": "Unlocks Tier 5 puzzles.",
+  "tier-6": "Unlocks Tier 6 puzzles.",
+  "tier-7": "Unlocks Tier 7 puzzles.",
+  "tier-8": "Unlocks Tier 8 puzzles.",
+  "tier-9": "Unlocks Tier 9 puzzles.",
+};
+
+const UPGRADE_DESCRIPTIONS_JA: Record<UpgradeId, string> = {
+  "placement-scanner": "選択中のピースを置けるセルを盤面上でハイライトします。",
+  "contradiction-detector": "今の盤面がまだ解けるか検査します。使うと補助クリア扱いになります。",
+  "forced-move": "現局面で1通りしかない手があれば自動で置きます。",
+  "auto-solver": "各Tierで手動クリア5回後に、裏側のソルバー盤面を動かせます。",
+  "solver-throughput": "自動ソルバーが1秒あたりに進める探索量を増やします。",
+  "solver-payout": "自動クリア報酬の倍率を上げます。",
+  "constraint-ordering": "空きマスの候補が少ない場所から調べ、分岐を減らします。",
+  "candidate-ordering": "候補手の順番を並べ替え、行き止まりを早めに見つけます。",
+  "symmetry-pruning": "同じ意味になる対称な探索枝を省き、無駄な探索を減らします。",
+  "dead-state-cache": "失敗した途中盤面を記録し、同じ詰みを再探索しにくくします。",
+  "parallel-solvers": "同時に走らせられる自動ソルバー盤面を増やします。",
+  "tier-1": "Tier 1 のパズルを解放します。",
+  "tier-2": "Tier 2 のパズルを解放します。",
+  "tier-3": "Tier 3 のパズルを解放します。",
+  "tier-4": "Tier 4 のパズルを解放します。",
+  "tier-5": "Tier 5 のパズルを解放します。",
+  "tier-6": "Tier 6 のパズルを解放します。",
+  "tier-7": "Tier 7 のパズルを解放します。",
+  "tier-8": "Tier 8 のパズルを解放します。",
+  "tier-9": "Tier 9 のパズルを解放します。",
 };
 
 const COPY = {
@@ -238,6 +288,12 @@ const COPY = {
     maximumDifficulty: "Maximum difficulty",
     clearCounts: (manual: number, assisted: number, automated: number) => `Manual ${manual}, Assisted ${assisted}, Automated ${automated}`,
     upgradeNames: UPGRADE_NAMES_EN,
+    upgradeDescriptions: UPGRADE_DESCRIPTIONS_EN,
+    dismissMessage: "Dismiss message",
+    resizeLeftPanel: "Resize left panel",
+    resizeRightPanel: "Resize right panel",
+    resizeCenterPanels: "Resize puzzle and solver panels",
+    resizeRightPanels: "Resize solver status and upgrades",
     maximumLevel: "maximum level",
     notEnoughCompute: "not enough Compute",
     requiresUpgrade: (name: string) => `requires ${name}`,
@@ -377,6 +433,12 @@ const COPY = {
     maximumDifficulty: "最大難易度",
     clearCounts: (manual: number, assisted: number, automated: number) => `手動 ${manual}、補助 ${assisted}、自動 ${automated}`,
     upgradeNames: UPGRADE_NAMES_JA,
+    upgradeDescriptions: UPGRADE_DESCRIPTIONS_JA,
+    dismissMessage: "メッセージを閉じる",
+    resizeLeftPanel: "左パネルの幅を変更",
+    resizeRightPanel: "右パネルの幅を変更",
+    resizeCenterPanels: "パズルとソルバー盤面の高さを変更",
+    resizeRightPanels: "ソルバー状態とアップグレードの高さを変更",
     maximumLevel: "最大レベル",
     notEnoughCompute: "Compute不足",
     requiresUpgrade: (name: string) => `${name}が必要`,
@@ -442,6 +504,65 @@ type AppCopy = (typeof COPY)[keyof typeof COPY];
 
 const COMPUTE_RATE_WINDOW_MS = 60_000;
 const COMPUTE_RATE_TICK_MS = 1_000;
+const PANEL_LAYOUT_STORAGE_KEY = "puzzle_incremental.panelLayout.v2";
+
+type PanelLayout = Readonly<{
+  left: number;
+  right: number;
+  centerSolver: number;
+  rightStatus: number;
+}>;
+
+type PanelResizeKind = "left" | "right" | "center-solver" | "right-status";
+
+const DEFAULT_PANEL_LAYOUT: PanelLayout = {
+  left: 330,
+  right: 360,
+  centerSolver: 150,
+  rightStatus: 300,
+};
+
+function clamp(value: number, min: number, max: number): number {
+  return Math.min(Math.max(value, min), max);
+}
+
+function sanitizePanelLayout(value: Partial<PanelLayout>): PanelLayout {
+  return {
+    left: clamp(value.left ?? DEFAULT_PANEL_LAYOUT.left, 240, 460),
+    right: clamp(value.right ?? DEFAULT_PANEL_LAYOUT.right, 300, 500),
+    centerSolver: clamp(value.centerSolver ?? DEFAULT_PANEL_LAYOUT.centerSolver, 110, 380),
+    rightStatus: clamp(value.rightStatus ?? DEFAULT_PANEL_LAYOUT.rightStatus, 160, 430),
+  };
+}
+
+function loadPanelLayout(): PanelLayout {
+  try {
+    const raw = window.localStorage.getItem(PANEL_LAYOUT_STORAGE_KEY);
+    if (!raw) {
+      return DEFAULT_PANEL_LAYOUT;
+    }
+    return sanitizePanelLayout(JSON.parse(raw) as Partial<PanelLayout>);
+  } catch {
+    return DEFAULT_PANEL_LAYOUT;
+  }
+}
+
+function savePanelLayout(layout: PanelLayout): void {
+  try {
+    window.localStorage.setItem(PANEL_LAYOUT_STORAGE_KEY, JSON.stringify(layout));
+  } catch {
+    // Panel sizes are a local preference; ignore storage failures.
+  }
+}
+
+function panelLayoutStyle(layout: PanelLayout): React.CSSProperties {
+  return {
+    "--left-panel-width": `${layout.left}px`,
+    "--right-panel-width": `${layout.right}px`,
+    "--center-solver-height": `${layout.centerSolver}px`,
+    "--right-status-height": `${layout.rightStatus}px`,
+  } as React.CSSProperties;
+}
 
 function pieceIdSortValue(id: string): number {
   const numeric = Number.parseInt(id.replace(/^\D+/, ""), 10);
@@ -557,6 +678,7 @@ function createInitialState(): AppState {
     redoStack: [],
     scannerEnabled: false,
     toast: loaded.message,
+    inspectionMessage: null,
     persistentWarning: null,
     clearResult: null,
     settingsOpen: false,
@@ -580,7 +702,6 @@ function classifyAutomated(state: AppState): RuntimePuzzle {
 }
 
 function awardClear(state: AppState, board: BoardState, stats?: SolverStats): AppState {
-  const copy = copyForSave(state.save);
   if (state.puzzle.cleared || !isSolved(state.puzzle.definition, board)) {
     return withSavedPuzzle(state, { puzzle: { ...state.puzzle, board } });
   }
@@ -630,7 +751,7 @@ function awardClear(state: AppState, board: BoardState, stats?: SolverStats): Ap
     save: nextSave,
     puzzle: { ...state.puzzle, board, cleared: true },
     clearResult: { reward, classification },
-    toast: copy.clearSummary(classificationLabel(copy, classification), reward),
+    toast: null,
   };
 }
 
@@ -729,6 +850,7 @@ function reducer(state: AppState, action: Action): AppState {
         redoStack: [],
         scannerEnabled: false,
         clearResult: null,
+        inspectionMessage: null,
       });
     case "set-tier":
       return { ...state, save: { ...state.save, progression: { ...state.save.progression, selectedTier: action.tier } } };
@@ -771,7 +893,11 @@ function reducer(state: AppState, action: Action): AppState {
       return awardClear(withSavedPuzzle(assistedState, { puzzle: { ...assistedState.puzzle, board }, undoStack: [...state.undoStack, state.puzzle.board], redoStack: [] }), board);
     }
     case "contradiction":
-      return withSavedPuzzle({ ...state, puzzle: classifyAssisted(state) }, { toast: action.message });
+      return withSavedPuzzle({ ...state, puzzle: classifyAssisted(state) }, { inspectionMessage: action.message });
+    case "dismiss-inspection-message":
+      return { ...state, inspectionMessage: null };
+    case "dismiss-clear-result":
+      return { ...state, clearResult: null };
     case "set-settings-open":
       return { ...state, settingsOpen: action.value };
     case "set-stats-open":
@@ -793,7 +919,7 @@ function reducer(state: AppState, action: Action): AppState {
     case "complete-tutorial":
       return { ...state, tutorialOpen: false, save: { ...state.save, settings: { ...state.save.settings, tutorialCompleted: true } } };
     case "solver-started":
-      return withSavedPuzzle({ ...state, puzzle: classifyAutomated(state) }, { solver: { ...state.solver, status: "running", sessionId: action.sessionId, stats: null, preview: [], activeSessions: 1 }, toast: copyForSave(state.save).autoSolverStarted });
+      return withSavedPuzzle({ ...state, puzzle: classifyAutomated(state) }, { solver: { ...state.solver, status: "running", sessionId: action.sessionId, stats: null, preview: [], activeSessions: 1 } });
     case "solver-progress":
       if (state.solver.sessionId !== action.sessionId) {
         return state;
@@ -811,7 +937,7 @@ function reducer(state: AppState, action: Action): AppState {
       return awardClear(next, board, action.stats);
     }
     case "solver-unsat":
-      return { ...state, solver: { ...state.solver, status: "unsat", sessionId: null, stats: action.stats, preview: [], activeSessions: 0 }, toast: copyForSave(state.save).solverFailedUnsat };
+      return { ...state, solver: { ...state.solver, status: "unsat", sessionId: null, stats: action.stats, preview: [], activeSessions: 0 } };
     case "solver-error":
       return {
         ...state,
@@ -928,7 +1054,6 @@ function reducer(state: AppState, action: Action): AppState {
           activeSessions: remainingActiveSessions,
           completedSessionIds: [...state.solver.completedSessionIds, action.sessionId],
         },
-        toast: copyForSave(state.save).automatedPuzzleSolved(action.puzzle.tier, reward),
       };
     }
     case "solver-run-unsat":
@@ -941,7 +1066,6 @@ function reducer(state: AppState, action: Action): AppState {
           runs: trimSolverRuns(state.solver.runs.map((run) => run.sessionId === action.sessionId ? { ...run, status: "unsat", stats: action.stats } : run)),
           activeSessions: Math.max(0, state.solver.activeSessions - 1),
         },
-        toast: copyForSave(state.save).automatedPuzzleFailed,
       };
     case "solver-run-cancelled":
       return {
@@ -1059,6 +1183,77 @@ function mergeCellStyle(placed: Placement | undefined, previewPiece: PieceInstan
   return Object.keys(style).length > 0 ? style as React.CSSProperties : undefined;
 }
 
+function distanceToRect(x: number, y: number, rect: Readonly<{ left: number; top: number; right: number; bottom: number }>): number {
+  const dx = x < rect.left ? rect.left - x : x > rect.right ? x - rect.right : 0;
+  const dy = y < rect.top ? rect.top - y : y > rect.bottom ? y - rect.bottom : 0;
+  return Math.hypot(dx, dy);
+}
+
+function findPlacementAtBoardPoint(
+  puzzle: PuzzleDefinition,
+  placements: readonly Placement[],
+  boardElement: HTMLElement,
+  clientX: number,
+  clientY: number,
+): Placement | null {
+  const rect = boardElement.getBoundingClientRect();
+  if (rect.width <= 0 || rect.height <= 0 || clientX < rect.left || clientX > rect.right || clientY < rect.top || clientY > rect.bottom) {
+    return null;
+  }
+  const computed = window.getComputedStyle(boardElement);
+  const columnGap = Number.parseFloat(computed.columnGap || computed.gap || "0") || 0;
+  const rowGap = Number.parseFloat(computed.rowGap || computed.gap || "0") || columnGap;
+  const cellWidth = (rect.width - columnGap * (puzzle.width - 1)) / puzzle.width;
+  const cellHeight = (rect.height - rowGap * (puzzle.height - 1)) / puzzle.height;
+  if (cellWidth <= 0 || cellHeight <= 0) {
+    return null;
+  }
+  const localX = clientX - rect.left;
+  const localY = clientY - rect.top;
+  const stepX = cellWidth + columnGap;
+  const stepY = cellHeight + rowGap;
+  const col = Math.floor(localX / stepX);
+  const row = Math.floor(localY / stepY);
+  const insideCell = col >= 0
+    && row >= 0
+    && col < puzzle.width
+    && row < puzzle.height
+    && localX - col * stepX <= cellWidth
+    && localY - row * stepY <= cellHeight;
+  if (insideCell) {
+    const index = row * puzzle.width + col;
+    return placements.find((placement) => placement.cellIndices.includes(index)) ?? null;
+  }
+
+  let best: Readonly<{ placement: Placement; distance: number }> | null = null;
+  for (const placement of placements) {
+    const cells = placement.cellIndices.map((index) => indexToCell(puzzle.width, index));
+    const minX = Math.min(...cells.map((cell) => cell.x));
+    const maxX = Math.max(...cells.map((cell) => cell.x));
+    const minY = Math.min(...cells.map((cell) => cell.y));
+    const maxY = Math.max(...cells.map((cell) => cell.y));
+    const bounds = {
+      left: minX * stepX,
+      top: minY * stepY,
+      right: maxX * stepX + cellWidth,
+      bottom: maxY * stepY + cellHeight,
+    };
+    if (localX < bounds.left || localX > bounds.right || localY < bounds.top || localY > bounds.bottom) {
+      continue;
+    }
+    const distance = Math.min(...cells.map((cell) => distanceToRect(localX, localY, {
+      left: cell.x * stepX,
+      top: cell.y * stepY,
+      right: cell.x * stepX + cellWidth,
+      bottom: cell.y * stepY + cellHeight,
+    })));
+    if (!best || distance < best.distance) {
+      best = { placement, distance };
+    }
+  }
+  return best?.placement ?? null;
+}
+
 function MiniSolverBoard({ run, language, copy }: Readonly<{ run: SolverRun; language: SaveDataV1["settings"]["language"]; copy: AppCopy }>) {
   const placedByCell = new Map<number, Placement>();
   for (const placement of run.preview) {
@@ -1111,6 +1306,7 @@ export function App() {
   const [hoverCell, setHoverCell] = useState<number | null>(null);
   const [eraseText, setEraseText] = useState("");
   const [computePerSecond, setComputePerSecond] = useState(0);
+  const [panelLayout, setPanelLayout] = useState<PanelLayout>(loadPanelLayout);
 
   useEffect(() => {
     try {
@@ -1135,6 +1331,10 @@ export function App() {
   useEffect(() => {
     return () => workerRef.current?.dispose();
   }, []);
+
+  useEffect(() => {
+    savePanelLayout(panelLayout);
+  }, [panelLayout]);
 
   useEffect(() => {
     const sampleComputeRate = () => {
@@ -1345,6 +1545,49 @@ export function App() {
     dispatch({ type: "contradiction", message: result.status === "unsat" ? copy.contradictionFound : copy.contradictionClear });
   };
 
+  const startPanelResize = (kind: PanelResizeKind, event: React.PointerEvent) => {
+    event.preventDefault();
+    const startX = event.clientX;
+    const startY = event.clientY;
+    const start = panelLayout;
+    const onPointerMove = (moveEvent: PointerEvent) => {
+      const deltaX = moveEvent.clientX - startX;
+      const deltaY = moveEvent.clientY - startY;
+      const viewportWidth = window.innerWidth || 1280;
+      const minCenterWidth = 460;
+      if (kind === "left") {
+        const maxLeft = Math.max(240, Math.min(460, viewportWidth - start.right - minCenterWidth));
+        setPanelLayout((current) => sanitizePanelLayout({
+          ...current,
+          left: clamp(start.left + deltaX, 240, maxLeft),
+        }));
+      } else if (kind === "right") {
+        const maxRight = Math.max(300, Math.min(500, viewportWidth - start.left - minCenterWidth));
+        setPanelLayout((current) => sanitizePanelLayout({
+          ...current,
+          right: clamp(start.right - deltaX, 300, maxRight),
+        }));
+      } else if (kind === "center-solver") {
+        setPanelLayout((current) => sanitizePanelLayout({
+          ...current,
+          centerSolver: start.centerSolver - deltaY,
+        }));
+      } else {
+        setPanelLayout((current) => sanitizePanelLayout({
+          ...current,
+          rightStatus: start.rightStatus + deltaY,
+        }));
+      }
+    };
+    const stopResize = () => {
+      window.removeEventListener("pointermove", onPointerMove);
+      document.body.classList.remove("resizing-panel");
+    };
+    document.body.classList.add("resizing-panel");
+    window.addEventListener("pointermove", onPointerMove);
+    window.addEventListener("pointerup", stopResize, { once: true });
+  };
+
   const handleCellClick = (index: number) => {
     const placed = placedByCell.get(index);
     if (placed) {
@@ -1362,9 +1605,13 @@ export function App() {
     dispatch({ type: "place", placement: preview.placement });
   };
 
-  const handleCellContextMenu = (event: React.MouseEvent, index: number) => {
+  const handleBoardContextMenu = (event: React.MouseEvent<HTMLElement>) => {
     event.preventDefault();
-    const placed = placedByCell.get(index);
+    const targetCell = event.target instanceof HTMLElement ? event.target.closest<HTMLElement>("[data-testid^='cell-']") : null;
+    const targetIndex = targetCell?.dataset.testid?.startsWith("cell-") ? Number.parseInt(targetCell.dataset.testid.slice(5), 10) : Number.NaN;
+    const placed = Number.isFinite(targetIndex)
+      ? placedByCell.get(targetIndex)
+      : findPlacementAtBoardPoint(puzzle, boardPlacements(state.puzzle.board), event.currentTarget, event.clientX, event.clientY);
     if (placed && !state.puzzle.cleared) {
       dispatch({ type: "remove-piece", pieceId: placed.pieceId });
     }
@@ -1445,8 +1692,8 @@ export function App() {
       {state.persistentWarning && <div className="warning" role="alert">{state.persistentWarning}</div>}
       {state.save.settings.notificationsEnabled && state.toast && <div className="toast" role="status" aria-live="polite" onClick={() => dispatch({ type: "toast", message: null })}>{state.toast}</div>}
 
-      <section className="layout">
-        <aside className="panel">
+      <section className="layout" style={panelLayoutStyle(panelLayout)}>
+        <aside className="panel left-panel">
           <h2>{copy.pieces}</h2>
           <div className="piece-tray">
             {trayPieces.map((piece) => {
@@ -1504,63 +1751,86 @@ export function App() {
           </div>
         </aside>
 
+        <div
+          className="resize-handle resize-handle-vertical"
+          role="separator"
+          aria-orientation="vertical"
+          aria-label={copy.resizeLeftPanel}
+          onPointerDown={(event) => startPanelResize("left", event)}
+        />
+
         <section className="board-panel">
-          <div className="board-top">
-            <div className="board-header">
-              <span>{copy.tier} {puzzle.tier}</span>
-              <button type="button" onClick={() => navigator.clipboard?.writeText(puzzle.seed)}>{copy.seed}: {puzzle.seed}</button>
-              <span>{copy.difficulty} {puzzle.difficulty.score}</span>
-              <span>{classificationLabel(copy, state.puzzle.classification)}</span>
+          <section className="panel puzzle-panel">
+            <div className="board-top">
+              <div className="board-header">
+                <span>{copy.tier} {puzzle.tier}</span>
+                <button type="button" onClick={() => navigator.clipboard?.writeText(puzzle.seed)}>{copy.seed}: {puzzle.seed}</button>
+                <span>{copy.difficulty} {puzzle.difficulty.score}</span>
+                <span>{classificationLabel(copy, state.puzzle.classification)}</span>
+              </div>
+              <div className="tier-switcher" aria-label={copy.tierSelection}>
+                {GAME_CONFIG.tiers.map((tier) => (
+                  <button
+                    key={tier.id}
+                    type="button"
+                    disabled={!isTierUnlocked(state.save.progression.upgradeLevels, tier.id)}
+                    className={state.save.progression.selectedTier === tier.id ? "selected" : ""}
+                    onClick={() => switchTier(tier.id, Date.now())}
+                  >
+                    {copy.tier} {tier.id}
+                  </button>
+                ))}
+              </div>
             </div>
-            <div className="tier-switcher" aria-label={copy.tierSelection}>
-              {GAME_CONFIG.tiers.map((tier) => (
-                <button
-                  key={tier.id}
-                  type="button"
-                  disabled={!isTierUnlocked(state.save.progression.upgradeLevels, tier.id)}
-                  className={state.save.progression.selectedTier === tier.id ? "selected" : ""}
-                  onClick={() => switchTier(tier.id, Date.now())}
-                >
-                  {copy.tier} {tier.id}
-                </button>
-              ))}
+            <div
+              className="board"
+              style={{ gridTemplateColumns: `repeat(${puzzle.width}, minmax(28px, 1fr))` }}
+              role="grid"
+              aria-label={copy.boardLabel}
+              onMouseLeave={() => setHoverCell(null)}
+              onWheel={handleBoardWheel}
+              onContextMenu={handleBoardContextMenu}
+            >
+              {Array.from({ length: puzzle.width * puzzle.height }, (_, index) => {
+                const placed = placedByCell.get(index);
+                const blocked = puzzle.blockedCellIndices.includes(index);
+                const preview = previewCells.has(index);
+                const scanner = scannerCells.has(index);
+                const solverPreview = solverPreviewCells.has(index);
+                const selectedPlacement = placed?.pieceId === state.selectedPieceId;
+                return (
+                  <button
+                    key={index}
+                    type="button"
+                    data-testid={`cell-${index}`}
+                    role="gridcell"
+                    className={`cell ${blocked ? "blocked" : ""} ${placed ? "placed" : ""} ${selectedPlacement ? "selected-placement" : ""} ${preview && !invalidPreview ? "preview" : ""} ${preview && invalidPreview ? "invalid-preview" : ""} ${scanner ? "scanner" : ""} ${solverPreview ? "solver-preview" : ""}`}
+                    style={mergeCellStyle(placed, preview && selectedPiece ? selectedPiece : null, puzzle.seed)}
+                    disabled={blocked || state.puzzle.cleared}
+                    onMouseEnter={() => setHoverCell(index)}
+                    onFocus={() => setHoverCell(index)}
+                    onClick={() => handleCellClick(index)}
+                  >
+                    {placed?.pieceType ?? ""}
+                  </button>
+                );
+              })}
             </div>
-          </div>
+            {state.inspectionMessage && (
+              <div className="inspection-message" role="status" aria-live="polite">
+                <span>{state.inspectionMessage}</span>
+                <button type="button" aria-label={copy.dismissMessage} onClick={() => dispatch({ type: "dismiss-inspection-message" })}>×</button>
+              </div>
+            )}
+          </section>
           <div
-            className="board"
-            style={{ gridTemplateColumns: `repeat(${puzzle.width}, minmax(28px, 1fr))` }}
-            role="grid"
-            aria-label={copy.boardLabel}
-            onMouseLeave={() => setHoverCell(null)}
-            onWheel={handleBoardWheel}
-          >
-            {Array.from({ length: puzzle.width * puzzle.height }, (_, index) => {
-              const placed = placedByCell.get(index);
-              const blocked = puzzle.blockedCellIndices.includes(index);
-              const preview = previewCells.has(index);
-              const scanner = scannerCells.has(index);
-              const solverPreview = solverPreviewCells.has(index);
-              const selectedPlacement = placed?.pieceId === state.selectedPieceId;
-              return (
-                <button
-                  key={index}
-                  type="button"
-                  data-testid={`cell-${index}`}
-                  role="gridcell"
-                  className={`cell ${blocked ? "blocked" : ""} ${placed ? "placed" : ""} ${selectedPlacement ? "selected-placement" : ""} ${preview && !invalidPreview ? "preview" : ""} ${preview && invalidPreview ? "invalid-preview" : ""} ${scanner ? "scanner" : ""} ${solverPreview ? "solver-preview" : ""}`}
-                  style={mergeCellStyle(placed, preview && selectedPiece ? selectedPiece : null, puzzle.seed)}
-                  disabled={blocked || state.puzzle.cleared}
-                  onMouseEnter={() => setHoverCell(index)}
-                  onFocus={() => setHoverCell(index)}
-                  onClick={() => handleCellClick(index)}
-                  onContextMenu={(event) => handleCellContextMenu(event, index)}
-                >
-                  {placed?.pieceType ?? ""}
-                </button>
-              );
-            })}
-          </div>
-          <section className="solver-lane" aria-label={copy.solverLanes}>
+            className="resize-handle resize-handle-horizontal"
+            role="separator"
+            aria-orientation="horizontal"
+            aria-label={copy.resizeCenterPanels}
+            onPointerDown={(event) => startPanelResize("center-solver", event)}
+          />
+          <section className="panel solver-lane" aria-label={copy.solverLanes}>
             <div className="solver-lane-header">
               <h2>{copy.solverLanes}</h2>
               <span>{state.solver.activeSessions}/{parallelSessions(state.save.progression.upgradeLevels)}</span>
@@ -1572,8 +1842,16 @@ export function App() {
           </section>
         </section>
 
-        <aside className="panel side-panel">
-          <section className="solver-section">
+        <div
+          className="resize-handle resize-handle-vertical"
+          role="separator"
+          aria-orientation="vertical"
+          aria-label={copy.resizeRightPanel}
+          onPointerDown={(event) => startPanelResize("right", event)}
+        />
+
+        <aside className="side-panel">
+          <section className="panel solver-section">
             <h2>{copy.solver}</h2>
             <div className="solver-grid">
               <span>{copy.status}</span><strong data-testid="solver-status">{solverStatusLabel(copy, state.solver.status)}</strong>
@@ -1603,7 +1881,15 @@ export function App() {
             </div>
           </section>
 
-          <section className="upgrade-section">
+          <div
+            className="resize-handle resize-handle-horizontal"
+            role="separator"
+            aria-orientation="horizontal"
+            aria-label={copy.resizeRightPanels}
+            onPointerDown={(event) => startPanelResize("right-status", event)}
+          />
+
+          <section className="panel upgrade-section">
             <div className="panel-heading-row">
               <h2>{copy.upgrades}</h2>
               <span>{formatNumber(state.save.economy.compute, language)} C</span>
@@ -1627,6 +1913,7 @@ export function App() {
                       <strong>{upgradeName(copy, upgrade.id)}</strong>
                       <span>{copy.level} {level}/{upgrade.maxLevel}</span>
                     </div>
+                    <p className="upgrade-description">{copy.upgradeDescriptions[upgrade.id]}</p>
                     <p>{outcome.ok ? `${copy.next}: ${outcome.price}C` : `${price}C, ${purchaseReason(copy, outcome)}`}</p>
                     <button type="button" onClick={() => dispatch({ type: "purchase", upgradeId: upgrade.id })} disabled={!outcome.ok}>{copy.buy}</button>
                   </article>
@@ -1644,7 +1931,7 @@ export function App() {
             <p>{copy.clearSummary(classificationLabel(copy, state.clearResult.classification), state.clearResult.reward)}</p>
             <p>{copy.difficulty} {puzzle.difficulty.score}</p>
             <button type="button" onClick={() => startNewPuzzle(false)}>{copy.nextPuzzle}</button>
-            <button type="button" onClick={() => dispatch({ type: "toast", message: null })}>{copy.close}</button>
+            <button type="button" onClick={() => dispatch({ type: "dismiss-clear-result" })}>{copy.close}</button>
           </div>
         </div>
       )}
@@ -1653,28 +1940,36 @@ export function App() {
         <div className="modal" role="dialog" aria-modal="true">
           <div className="modal-body">
             <h2>{copy.settings}</h2>
-            <label>{copy.theme}
+            <label className="setting-field">{copy.theme}
               <select value={theme} onChange={(event) => dispatch({ type: "set-theme", value: event.target.value as SaveDataV1["settings"]["theme"] })}>
                 <option value="system">{copy.system}</option>
                 <option value="light">{copy.light}</option>
                 <option value="dark">{copy.dark}</option>
               </select>
             </label>
-            <label>{copy.language}
+            <label className="setting-field">{copy.language}
               <select value={language} onChange={(event) => dispatch({ type: "set-language", value: event.target.value as SaveDataV1["settings"]["language"] })}>
                 <option value="en">{copy.english}</option>
                 <option value="ja">{copy.japanese}</option>
               </select>
             </label>
-            <label>{copy.visualization}
+            <label className="setting-field">{copy.visualization}
               <select value={state.save.settings.visualization} onChange={(event) => dispatch({ type: "set-visualization", value: event.target.value as SaveDataV1["settings"]["visualization"] })}>
                 <option value="on">{copy.on}</option>
                 <option value="reduced">{copy.reduced}</option>
                 <option value="off">{copy.off}</option>
               </select>
             </label>
-            <label><input type="checkbox" checked={state.save.settings.highContrast} onChange={(event) => dispatch({ type: "set-high-contrast", value: event.target.checked })} /> {copy.highContrast}</label>
-            <label><input type="checkbox" checked={state.save.settings.notificationsEnabled} onChange={(event) => dispatch({ type: "set-notifications-enabled", value: event.target.checked })} /> {copy.notifications}</label>
+            <label className="setting-toggle-row">
+              <span>{copy.highContrast}</span>
+              <input type="checkbox" checked={state.save.settings.highContrast} onChange={(event) => dispatch({ type: "set-high-contrast", value: event.target.checked })} />
+              <span className="switch" aria-hidden="true" />
+            </label>
+            <label className="setting-toggle-row">
+              <span>{copy.notifications}</span>
+              <input type="checkbox" checked={state.save.settings.notificationsEnabled} onChange={(event) => dispatch({ type: "set-notifications-enabled", value: event.target.checked })} />
+              <span className="switch" aria-hidden="true" />
+            </label>
             <button type="button" onClick={() => {
               const blob = new Blob([exportSave(saveFromState(state))], { type: "application/json" });
               const url = URL.createObjectURL(blob);
@@ -1697,7 +1992,7 @@ export function App() {
                 }).catch(() => dispatch({ type: "toast", message: copy.importFailed }));
               }} />
             </label>
-            <label>{copy.eraseSave}
+            <label className="setting-field">{copy.eraseSave}
               <input value={eraseText} onChange={(event) => setEraseText(event.target.value)} placeholder={copy.erasePlaceholder} />
             </label>
             <button type="button" disabled={eraseText !== "ERASE"} onClick={() => {

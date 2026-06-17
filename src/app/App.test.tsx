@@ -65,6 +65,43 @@ function seedTwoPiecePuzzle(): void {
   window.localStorage.setItem(BACKUP_SAVE_KEY, JSON.stringify(save));
 }
 
+function seedClearPuzzle(): void {
+  const now = new Date("2026-01-01T00:00:00.000Z");
+  const base = createInitialSave(now);
+  const placements = [
+    { pieceId: "p0", pieceType: "O", orientationIndex: 0, anchor: { x: 0, y: 0 }, cellIndices: [0, 1, 4, 5] },
+    { pieceId: "p1", pieceType: "O", orientationIndex: 0, anchor: { x: 2, y: 0 }, cellIndices: [2, 3, 6, 7] },
+    { pieceId: "p2", pieceType: "O", orientationIndex: 0, anchor: { x: 0, y: 2 }, cellIndices: [8, 9, 12, 13] },
+    { pieceId: "p3", pieceType: "O", orientationIndex: 0, anchor: { x: 2, y: 2 }, cellIndices: [10, 11, 14, 15] },
+  ];
+  const save = {
+    ...base,
+    settings: { ...base.settings, tutorialCompleted: true },
+    currentPuzzle: {
+      definition: {
+        id: "clear-fixture",
+        generatorVersion: GAME_CONFIG.generatorVersion,
+        tier: 0,
+        seed: "clear-fixture",
+        width: 4,
+        height: 4,
+        usableCellIndices: Array.from({ length: 16 }, (_, index) => index),
+        blockedCellIndices: [],
+        pieces: placements.map((placement) => ({ id: placement.pieceId, type: "O" })),
+        difficulty: { score: 1, solutionNodes: 1, backtracks: 0, maxDepth: 4, forcedRatio: 1, initialBranching: 4, capped: false },
+        constructionSolution: placements,
+      },
+      placements: [],
+      classification: "manual",
+      startedAt: now.toISOString(),
+      elapsedMilliseconds: 0,
+      cleared: false,
+    },
+  };
+  window.localStorage.setItem(SAVE_KEY, JSON.stringify(save));
+  window.localStorage.setItem(BACKUP_SAVE_KEY, JSON.stringify(save));
+}
+
 function seedUnsortedPiecePuzzle(): void {
   const now = new Date("2026-01-01T00:00:00.000Z");
   const base = createInitialSave(now);
@@ -112,6 +149,43 @@ function seedPurchasedUpgrade(): void {
         ...base.progression.upgradeLevels,
         "placement-scanner": 1,
       },
+    },
+  };
+  window.localStorage.setItem(SAVE_KEY, JSON.stringify(save));
+  window.localStorage.setItem(BACKUP_SAVE_KEY, JSON.stringify(save));
+}
+
+function seedContradictionDetector(): void {
+  const now = new Date("2026-01-01T00:00:00.000Z");
+  const base = createInitialSave(now);
+  const save = {
+    ...base,
+    settings: { ...base.settings, tutorialCompleted: true },
+    progression: {
+      ...base.progression,
+      upgradeLevels: {
+        ...base.progression.upgradeLevels,
+        "contradiction-detector": 1,
+      },
+    },
+    currentPuzzle: {
+      definition: {
+        id: "contradiction-fixture",
+        generatorVersion: GAME_CONFIG.generatorVersion,
+        tier: 0,
+        seed: "contradiction-fixture",
+        width: 4,
+        height: 4,
+        usableCellIndices: Array.from({ length: 16 }, (_, index) => index),
+        blockedCellIndices: [],
+        pieces: [{ id: "p0", type: "I" }],
+        difficulty: { score: 1, solutionNodes: 1, backtracks: 0, maxDepth: 1, forcedRatio: 1, initialBranching: 1, capped: false },
+      },
+      placements: [],
+      classification: "manual",
+      startedAt: now.toISOString(),
+      elapsedMilliseconds: 0,
+      cleared: false,
     },
   };
   window.localStorage.setItem(SAVE_KEY, JSON.stringify(save));
@@ -244,6 +318,53 @@ describe("App", () => {
     expect(cell).toHaveTextContent("");
   });
 
+  it("removes a placed piece when right clicking an internal board gap", async () => {
+    seedTwoPiecePuzzle();
+    const user = userEvent.setup();
+    render(<App />);
+    const piece = screen.getByTestId("piece-p0");
+    const board = screen.getByRole("grid", { name: "Puzzle board" });
+
+    Object.defineProperty(board, "getBoundingClientRect", {
+      value: () => ({
+        x: 0,
+        y: 0,
+        left: 0,
+        top: 0,
+        right: 132,
+        bottom: 132,
+        width: 132,
+        height: 132,
+        toJSON: () => ({}),
+      }),
+    });
+
+    await user.click(piece);
+    await user.click(screen.getByTestId("cell-0"));
+    expect(piece).toHaveTextContent("Placed");
+
+    fireEvent.contextMenu(board, { clientX: 32, clientY: 15 });
+    expect(piece).toHaveTextContent("Ready");
+  });
+
+  it("closes the clear dialog without replacing the solved board", async () => {
+    seedClearPuzzle();
+    const user = userEvent.setup();
+    render(<App />);
+    const anchors = [0, 2, 8, 10];
+
+    for (let index = 0; index < anchors.length; index += 1) {
+      await user.click(screen.getByTestId(`piece-p${index}`));
+      await user.click(screen.getByTestId(`cell-${anchors[index]}`));
+    }
+
+    expect(screen.getByRole("dialog")).toHaveTextContent("manual clear");
+    await user.click(screen.getByRole("button", { name: "Close" }));
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(screen.getByTestId("cell-0")).toHaveTextContent("O");
+    expect(screen.getByTestId("cell-15")).toHaveTextContent("O");
+  });
+
   it("marks overlapping placement previews as invalid", async () => {
     seedTwoPiecePuzzle();
     const user = userEvent.setup();
@@ -256,6 +377,17 @@ describe("App", () => {
     await user.hover(cell);
 
     expect(cell).toHaveClass("invalid-preview");
+  });
+
+  it("shows contradiction checks below the puzzle instead of the global toast", async () => {
+    seedContradictionDetector();
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.click(screen.getByRole("button", { name: "Check" }));
+
+    expect(screen.getByText("This position cannot be completed.")).toBeInTheDocument();
+    expect(screen.queryByRole("status")).not.toHaveClass("toast");
   });
 
   it("shows theme settings", async () => {
@@ -306,6 +438,13 @@ describe("App", () => {
     expect(screen.queryByText("Placement Scanner")).not.toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Hide purchased: On" }));
     expect(screen.getByText("Placement Scanner")).toBeInTheDocument();
+  });
+
+  it("shows clearer solver efficiency upgrade names and descriptions", () => {
+    render(<App />);
+
+    expect(screen.getByText("Solver Efficiency #1")).toBeInTheDocument();
+    expect(screen.getByText("Tries the most constrained empty cells first to reduce branching.")).toBeInTheDocument();
   });
 
   it("requires five manual clears on the current tier before auto solver starts", () => {
