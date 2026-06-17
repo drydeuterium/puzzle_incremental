@@ -49,6 +49,9 @@ type PendingConfirmation =
   | Readonly<{ type: "switch-tier"; tier: number; timestamp: number }>;
 
 const SOLVER_LANE_SLOT_COUNT = 4;
+const SOLVER_LANE_MIN_SESSION_MS = 1600;
+const SOLVER_LANE_PREVIEW_UPDATE_MS = 750;
+const SOLVER_LANE_SESSION_STAGGER_MS = 140;
 
 type SolverUiState = Readonly<{
   status: SolverStats["status"];
@@ -806,8 +809,18 @@ function isActiveSolverStatus(status: SolverStats["status"]): boolean {
   return status === "running" || status === "paused";
 }
 
+function isRetainedSolverStatus(status: SolverStats["status"]): boolean {
+  return isActiveSolverStatus(status) || status === "solved" || status === "unsat";
+}
+
 function trimSolverRuns(runs: readonly SolverRun[]): readonly SolverRun[] {
-  return runs.filter((run) => isActiveSolverStatus(run.status)).sort((a, b) => a.laneIndex - b.laneIndex);
+  const retainedByLane = new Map<number, SolverRun>();
+  for (const run of runs) {
+    if (isRetainedSolverStatus(run.status)) {
+      retainedByLane.set(run.laneIndex, run);
+    }
+  }
+  return [...retainedByLane.values()].sort((a, b) => a.laneIndex - b.laneIndex);
 }
 
 function mergeRunningPreview(current: readonly Placement[], incoming: readonly Placement[] | undefined, status: SolverStats["status"]): readonly Placement[] {
@@ -1415,6 +1428,98 @@ function findPlacementAtBoardPoint(
   return best?.placement ?? null;
 }
 
+function SolverLaneSlot({
+  run,
+  laneIndex,
+  isUnlockedLane,
+  language,
+  copy,
+}: Readonly<{
+  run: SolverRun | null;
+  laneIndex: number;
+  isUnlockedLane: boolean;
+  language: SaveDataV1["settings"]["language"];
+  copy: AppCopy;
+}>) {
+  const [displayRun, setDisplayRun] = useState<SolverRun | null>(run);
+  const displayRunRef = useRef<SolverRun | null>(run);
+  const pendingRunRef = useRef<SolverRun | null>(run);
+  const displayedSinceRef = useRef(0);
+  const previewUpdatedAtRef = useRef(0);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const clearPendingTimer = useCallback(() => {
+    if (timerRef.current) {
+      clearTimeout(timerRef.current);
+      timerRef.current = null;
+    }
+  }, []);
+
+  const commitDisplayRun = useCallback((nextRun: SolverRun | null) => {
+    clearPendingTimer();
+    displayRunRef.current = nextRun;
+    pendingRunRef.current = nextRun;
+    displayedSinceRef.current = Date.now();
+    previewUpdatedAtRef.current = Date.now();
+    setDisplayRun(nextRun);
+  }, [clearPendingTimer]);
+
+  const scheduleDisplayRun = useCallback((nextRun: SolverRun | null, delay: number) => {
+    clearPendingTimer();
+    timerRef.current = setTimeout(() => {
+      commitDisplayRun(nextRun);
+      timerRef.current = null;
+    }, Math.max(0, delay));
+  }, [clearPendingTimer, commitDisplayRun]);
+
+  useEffect(() => {
+    pendingRunRef.current = run;
+    const currentRun = displayRunRef.current;
+    const currentSessionId = currentRun?.sessionId ?? null;
+    const nextSessionId = run?.sessionId ?? null;
+
+    if (currentSessionId === nextSessionId) {
+      if (!run) {
+        scheduleDisplayRun(null, 0);
+        return clearPendingTimer;
+      }
+      const elapsedSincePreview = Date.now() - previewUpdatedAtRef.current;
+      if (!isActiveSolverStatus(run.status) || elapsedSincePreview >= SOLVER_LANE_PREVIEW_UPDATE_MS) {
+        scheduleDisplayRun(run, 0);
+        return clearPendingTimer;
+      }
+      scheduleDisplayRun(run, SOLVER_LANE_PREVIEW_UPDATE_MS - elapsedSincePreview);
+      return clearPendingTimer;
+    }
+
+    const elapsedSinceSessionShown = displayedSinceRef.current === 0
+      ? SOLVER_LANE_MIN_SESSION_MS
+      : Date.now() - displayedSinceRef.current;
+    if (!currentRun || elapsedSinceSessionShown >= SOLVER_LANE_MIN_SESSION_MS) {
+      scheduleDisplayRun(run, currentRun ? laneIndex * SOLVER_LANE_SESSION_STAGGER_MS : 0);
+      return clearPendingTimer;
+    }
+
+    clearPendingTimer();
+    timerRef.current = setTimeout(() => {
+      const latestRun = pendingRunRef.current;
+      commitDisplayRun(latestRun);
+      timerRef.current = null;
+    }, SOLVER_LANE_MIN_SESSION_MS - elapsedSinceSessionShown + laneIndex * SOLVER_LANE_SESSION_STAGGER_MS);
+    return clearPendingTimer;
+  }, [clearPendingTimer, commitDisplayRun, laneIndex, run, scheduleDisplayRun]);
+
+  if (displayRun) {
+    return <MiniSolverBoard run={displayRun} language={language} copy={copy} />;
+  }
+
+  return (
+    <article className={`solver-run solver-run-placeholder ${isUnlockedLane ? "" : "solver-run-unassigned"}`}>
+      <span>{isUnlockedLane ? copy.solverLaneIdle : copy.solverLaneUnassigned}</span>
+    </article>
+  );
+}
+
 function MiniSolverBoard({ run, language, copy }: Readonly<{ run: SolverRun; language: SaveDataV1["settings"]["language"]; copy: AppCopy }>) {
   const placedByCell = new Map<number, Placement>();
   for (const placement of run.preview) {
@@ -1423,7 +1528,7 @@ function MiniSolverBoard({ run, language, copy }: Readonly<{ run: SolverRun; lan
     }
   }
   return (
-    <article className={`solver-run ${isActiveSolverStatus(run.status) ? "active" : ""}`} data-testid="solver-run">
+    <article className={`solver-run ${isActiveSolverStatus(run.status) ? "active" : "terminal"}`} data-testid="solver-run">
       <div className="solver-run-header">
         <strong>{copy.tier} {run.puzzle.tier}</strong>
         <span>{solverStatusLabel(copy, run.status)}</span>
@@ -1909,8 +2014,8 @@ export function App() {
   const invalidPreview = Boolean(selectedPlacementPreview && !selectedPlacementPreview.validation.ok);
   const showSolverPreview = state.solver.status === "running" || state.solver.status === "paused";
   const solverPreviewCells = new Set(showSolverPreview ? state.solver.preview.flatMap((placement) => placement.cellIndices) : []);
-  const activeSolverRuns = state.solver.runs.filter((run) => isActiveSolverStatus(run.status));
-  const solverRunSlots = Array.from({ length: SOLVER_LANE_SLOT_COUNT }, (_, laneIndex) => activeSolverRuns.find((run) => run.laneIndex === laneIndex) ?? null);
+  const displaySolverRuns = state.solver.runs.filter((run) => isRetainedSolverStatus(run.status));
+  const solverRunSlots = Array.from({ length: SOLVER_LANE_SLOT_COUNT }, (_, laneIndex) => displaySolverRuns.find((run) => run.laneIndex === laneIndex) ?? null);
 
   const theme = state.save.settings.theme ?? "system";
   const appClassName = ["app", state.save.settings.highContrast ? "high-contrast" : "", theme === "dark" ? "dark" : "", theme === "light" ? "light" : ""].filter(Boolean).join(" ");
@@ -2078,17 +2183,16 @@ export function App() {
             </div>
             <div className="solver-run-list">
               {solverRunSlots.map((run, laneIndex) => {
-                if (run) {
-                  return <MiniSolverBoard key={run.sessionId} run={run} language={language} copy={copy} />;
-                }
                 const isUnlockedLane = laneIndex < solverParallelSessions;
                 return (
-                  <article
-                    className={`solver-run solver-run-placeholder ${isUnlockedLane ? "" : "solver-run-unassigned"}`}
+                  <SolverLaneSlot
                     key={`solver-lane-${laneIndex}`}
-                  >
-                    <span>{isUnlockedLane ? copy.solverLaneIdle : copy.solverLaneUnassigned}</span>
-                  </article>
+                    run={run}
+                    laneIndex={laneIndex}
+                    isUnlockedLane={isUnlockedLane}
+                    language={language}
+                    copy={copy}
+                  />
                 );
               })}
             </div>

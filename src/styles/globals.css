@@ -454,6 +454,10 @@ button:disabled {
   border-color: color-mix(in srgb, var(--accent) 50%, var(--line));
 }
 
+.solver-run.terminal {
+  border-color: color-mix(in srgb, var(--line) 82%, var(--accent) 18%);
+}
+
 .solver-run-placeholder {
   place-items: center;
   border-style: dashed;
