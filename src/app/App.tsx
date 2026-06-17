@@ -104,6 +104,10 @@ const UPGRADE_TAB_BY_ID: Record<UpgradeId, UpgradeTabId> = {
   "candidate-ordering": "solver",
   "symmetry-pruning": "solver",
   "dead-state-cache": "solver",
+  "isolated-region-pruning": "solver",
+  "zero-candidate-pruning": "solver",
+  "color-balance-pruning": "solver",
+  "partial-board-cache": "solver",
   "parallel-solvers": "solver",
   "tier-1": "tier",
   "tier-2": "tier",
@@ -177,6 +181,10 @@ const UPGRADE_NAMES_EN: Record<UpgradeId, string> = {
   "candidate-ordering": "Solver Efficiency #3",
   "symmetry-pruning": "Solver Efficiency #2",
   "dead-state-cache": "Solver Efficiency #4",
+  "isolated-region-pruning": "High Tier Solver #1",
+  "zero-candidate-pruning": "High Tier Solver #2",
+  "color-balance-pruning": "High Tier Solver #3",
+  "partial-board-cache": "High Tier Solver #4",
   "parallel-solvers": "Parallel Solvers",
   "tier-1": "Tier 1",
   "tier-2": "Tier 2",
@@ -200,6 +208,10 @@ const UPGRADE_NAMES_JA: Record<UpgradeId, string> = {
   "candidate-ordering": "ソルバ効率化 #3",
   "symmetry-pruning": "ソルバ効率化 #2",
   "dead-state-cache": "ソルバ効率化 #4",
+  "isolated-region-pruning": "上位ソルバ効率化 #1",
+  "zero-candidate-pruning": "上位ソルバ効率化 #2",
+  "color-balance-pruning": "上位ソルバ効率化 #3",
+  "partial-board-cache": "上位ソルバ効率化 #4",
   "parallel-solvers": "並列ソルバー",
   "tier-1": "Tier 1",
   "tier-2": "Tier 2",
@@ -223,6 +235,10 @@ const UPGRADE_DESCRIPTIONS_EN: Record<UpgradeId, string> = {
   "candidate-ordering": "Reorders candidate placements so dead ends are found earlier.",
   "symmetry-pruning": "Skips equivalent symmetric branches when possible.",
   "dead-state-cache": "Remembers failed partial boards to avoid solving the same dead state again.",
+  "isolated-region-pruning": "Tier 7+ only: cuts branches where empty regions cannot be tiled by four-cell pieces.",
+  "zero-candidate-pruning": "Tier 7+ only: cuts branches as soon as an empty cell has no remaining legal placement.",
+  "color-balance-pruning": "Tier 7+ only: rejects branches whose remaining color pattern cannot match the remaining pieces.",
+  "partial-board-cache": "Tier 7+ only: remembers failed empty-board shapes by remaining piece types.",
   "parallel-solvers": "Adds one background solver lane per level.",
   "tier-1": "Unlocks Tier 1 puzzles.",
   "tier-2": "Unlocks Tier 2 puzzles.",
@@ -246,6 +262,10 @@ const UPGRADE_DESCRIPTIONS_JA: Record<UpgradeId, string> = {
   "candidate-ordering": "候補手の順番を並べ替え、行き止まりを早めに見つけます。",
   "symmetry-pruning": "同じ意味になる対称な探索枝を省き、無駄な探索を減らします。",
   "dead-state-cache": "失敗した途中盤面を記録し、同じ詰みを再探索しにくくします。",
+  "isolated-region-pruning": "Tier 7 以上で有効。空き領域が4マス単位で埋まらない分岐を捨てます。",
+  "zero-candidate-pruning": "Tier 7 以上で有効。置ける候補がない空きマスを見つけた時点で分岐を捨てます。",
+  "color-balance-pruning": "Tier 7 以上で有効。残りピースでは色数パターンを満たせない分岐を捨てます。",
+  "partial-board-cache": "Tier 7 以上で有効。失敗した空き盤面形状を残りピース種類ごとに記録します。",
   "parallel-solvers": "同時に走らせられる自動ソルバー盤面を増やします。",
   "tier-1": "Tier 1 のパズルを解放します。",
   "tier-2": "Tier 2 のパズルを解放します。",
@@ -1798,7 +1818,7 @@ export function App() {
       usedLaneIndices.add(laneIndex);
       nextLaneIndex = (laneIndex + 1) % Math.max(1, laneCount);
       solverSessionsRef.current.set(sessionId, automatedPuzzle);
-      worker.post({ type: "START", sessionId, puzzle: automatedPuzzle, options: solverOptionsFromUpgrades(state.save.progression.upgradeLevels, state.save.settings.visualization) });
+      worker.post({ type: "START", sessionId, puzzle: automatedPuzzle, options: solverOptionsFromUpgrades(state.save.progression.upgradeLevels, state.save.settings.visualization, automatedPuzzle.tier) });
       return { sessionId, puzzle: automatedPuzzle, laneIndex };
     });
     nextSolverLaneRef.current = nextLaneIndex;
@@ -1923,7 +1943,7 @@ export function App() {
       dispatch({ type: "toast", message: copy.lockedUpgrade(upgradeName(copy, "contradiction-detector")) });
       return;
     }
-    const result = solveToEnd(puzzle, solverOptionsFromUpgrades(state.save.progression.upgradeLevels, "off"), state.puzzle.board, 100_000);
+    const result = solveToEnd(puzzle, solverOptionsFromUpgrades(state.save.progression.upgradeLevels, "off", puzzle.tier), state.puzzle.board, 100_000);
     dispatch({ type: "contradiction", message: result.status === "unsat" ? copy.contradictionFound : copy.contradictionClear });
   };
 

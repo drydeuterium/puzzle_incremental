@@ -1,4 +1,5 @@
 import { enumeratePlacements } from "../core/board";
+import { indexToCell } from "../core/coordinates";
 import type { BoardState, Placement, PuzzleDefinition, SolverOptions, SolverStats, StepResult } from "../core/types";
 
 type Candidate = Readonly<{
@@ -7,6 +8,7 @@ type Candidate = Readonly<{
   pieceType: string;
   pieceMask: bigint;
   mask: bigint;
+  colorCounts: readonly [number, number, number, number];
   placement: Placement;
 }>;
 
@@ -33,6 +35,19 @@ function now(): number {
   return performance.now();
 }
 
+function colorIndex(width: number, index: number): number {
+  const cell = indexToCell(width, index);
+  return (cell.x % 2) + (cell.y % 2) * 2;
+}
+
+function colorCountsFor(width: number, indices: readonly number[]): readonly [number, number, number, number] {
+  const counts: [number, number, number, number] = [0, 0, 0, 0];
+  for (const index of indices) {
+    counts[colorIndex(width, index)] += 1;
+  }
+  return counts;
+}
+
 export function createSolver(puzzle: PuzzleDefinition, options: SolverOptions, initialBoard?: BoardState): IncrementalSolver {
   const usableMask = maskFromIndices(puzzle.usableCellIndices);
   const allCandidates = puzzle.pieces.flatMap((piece, pieceIndex) =>
@@ -42,16 +57,36 @@ export function createSolver(puzzle: PuzzleDefinition, options: SolverOptions, i
       pieceType: piece.type,
       pieceMask: 1n << BigInt(pieceIndex),
       mask: maskFromIndices(placement.cellIndices),
+      colorCounts: colorCountsFor(puzzle.width, placement.cellIndices),
       placement,
     })),
   );
+  const candidatesByPiece = new Map<number, Candidate[]>();
   const candidatesByCell = new Map<number, Candidate[]>();
   for (const candidate of allCandidates) {
+    const pieceCandidates = candidatesByPiece.get(candidate.pieceIndex) ?? [];
+    pieceCandidates.push(candidate);
+    candidatesByPiece.set(candidate.pieceIndex, pieceCandidates);
     for (const index of candidate.placement.cellIndices) {
       const list = candidatesByCell.get(index) ?? [];
       list.push(candidate);
       candidatesByCell.set(index, list);
     }
+  }
+  const usableSet = new Set(puzzle.usableCellIndices);
+  const neighborsByCell = new Map<number, readonly number[]>();
+  for (const index of puzzle.usableCellIndices) {
+    const cell = indexToCell(puzzle.width, index);
+    const neighbors = [
+      { x: cell.x - 1, y: cell.y },
+      { x: cell.x + 1, y: cell.y },
+      { x: cell.x, y: cell.y - 1 },
+      { x: cell.x, y: cell.y + 1 },
+    ]
+      .filter((neighbor) => neighbor.x >= 0 && neighbor.x < puzzle.width && neighbor.y >= 0 && neighbor.y < puzzle.height)
+      .map((neighbor) => neighbor.y * puzzle.width + neighbor.x)
+      .filter((neighborIndex) => usableSet.has(neighborIndex));
+    neighborsByCell.set(index, neighbors);
   }
 
   let occupiedMask = 0n;
@@ -63,7 +98,15 @@ export function createSolver(puzzle: PuzzleDefinition, options: SolverOptions, i
       if (pieceIndex >= 0) {
         occupiedMask |= maskFromIndices(placement.cellIndices);
         usedPieceMask |= 1n << BigInt(pieceIndex);
-        selected.push({ id: -selected.length - 1, pieceIndex, pieceType: placement.pieceType, pieceMask: 1n << BigInt(pieceIndex), mask: maskFromIndices(placement.cellIndices), placement });
+        selected.push({
+          id: -selected.length - 1,
+          pieceIndex,
+          pieceType: placement.pieceType,
+          pieceMask: 1n << BigInt(pieceIndex),
+          mask: maskFromIndices(placement.cellIndices),
+          colorCounts: colorCountsFor(puzzle.width, placement.cellIndices),
+          placement,
+        });
       }
     }
   }
@@ -76,6 +119,8 @@ export function createSolver(puzzle: PuzzleDefinition, options: SolverOptions, i
   const startedAt = now();
   const deadKeys: string[] = [];
   const deadSet = new Set<string>();
+  const partialDeadKeys: string[] = [];
+  const partialDeadSet = new Set<string>();
 
   const stats = (): SolverStats => ({
     status,
@@ -88,6 +133,20 @@ export function createSolver(puzzle: PuzzleDefinition, options: SolverOptions, i
   });
 
   const stateKey = (): string => `${occupiedMask.toString(16)}:${usedPieceMask.toString(16)}`;
+  const emptyMask = (): bigint => usableMask & ~occupiedMask;
+
+  const remainingPieceTypeKey = (): string => {
+    const counts = new Map<string, number>();
+    for (let index = 0; index < puzzle.pieces.length; index += 1) {
+      if ((usedPieceMask & (1n << BigInt(index))) === 0n) {
+        const type = puzzle.pieces[index].type;
+        counts.set(type, (counts.get(type) ?? 0) + 1);
+      }
+    }
+    return [...counts.entries()].sort(([left], [right]) => left.localeCompare(right)).map(([type, count]) => `${type}${count}`).join("");
+  };
+
+  const partialStateKey = (): string => `${emptyMask().toString(16)}:${remainingPieceTypeKey()}`;
 
   const preview = (): readonly Placement[] => {
     const current = selected.map((candidate) => candidate.placement);
@@ -97,7 +156,27 @@ export function createSolver(puzzle: PuzzleDefinition, options: SolverOptions, i
     return latestVisiblePreview;
   };
 
+  const markPartialDead = (): void => {
+    const limit = options.heuristics.partialBoardCacheEntries;
+    if (limit <= 0) {
+      return;
+    }
+    const key = partialStateKey();
+    if (partialDeadSet.has(key)) {
+      return;
+    }
+    partialDeadSet.add(key);
+    partialDeadKeys.push(key);
+    while (partialDeadKeys.length > limit) {
+      const removed = partialDeadKeys.shift();
+      if (removed) {
+        partialDeadSet.delete(removed);
+      }
+    }
+  };
+
   const markDead = (key: string): void => {
+    markPartialDead();
     const limit = options.heuristics.deadStateCacheEntries;
     if (limit <= 0 || deadSet.has(key)) {
       return;
@@ -126,6 +205,105 @@ export function createSolver(puzzle: PuzzleDefinition, options: SolverOptions, i
       }
     }
     return true;
+  };
+
+  const emptyComponents = (): readonly Readonly<{ mask: bigint; size: number }>[] => {
+    const empty = emptyMask();
+    const components: { mask: bigint; size: number }[] = [];
+    let visited = 0n;
+    for (const start of puzzle.usableCellIndices) {
+      const startBit = 1n << BigInt(start);
+      if ((empty & startBit) === 0n || (visited & startBit) !== 0n) {
+        continue;
+      }
+      let componentMask = 0n;
+      let size = 0;
+      const queue = [start];
+      visited |= startBit;
+      for (let offset = 0; offset < queue.length; offset += 1) {
+        const current = queue[offset];
+        const currentBit = 1n << BigInt(current);
+        componentMask |= currentBit;
+        size += 1;
+        for (const neighbor of neighborsByCell.get(current) ?? []) {
+          const neighborBit = 1n << BigInt(neighbor);
+          if ((empty & neighborBit) !== 0n && (visited & neighborBit) === 0n) {
+            visited |= neighborBit;
+            queue.push(neighbor);
+          }
+        }
+      }
+      components.push({ mask: componentMask, size });
+    }
+    return components;
+  };
+
+  const hasInvalidEmptyRegion = (): boolean => emptyComponents().some((component) => component.size % 4 !== 0);
+
+  const hasEmptyCellWithoutCandidate = (): boolean => {
+    for (const index of puzzle.usableCellIndices) {
+      if ((occupiedMask & (1n << BigInt(index))) !== 0n) {
+        continue;
+      }
+      const hasCandidate = (candidatesByCell.get(index) ?? [])
+        .some((candidate) => canUseCandidate(candidate) && candidateAllowedBySymmetry(candidate));
+      if (!hasCandidate) {
+        return true;
+      }
+    }
+    return false;
+  };
+
+  const hasImpossibleColorBalance = (): boolean => {
+    const needed: [number, number, number, number] = [0, 0, 0, 0];
+    const empty = emptyMask();
+    for (const index of puzzle.usableCellIndices) {
+      if ((empty & (1n << BigInt(index))) !== 0n) {
+        needed[colorIndex(puzzle.width, index)] += 1;
+      }
+    }
+
+    const minimum: [number, number, number, number] = [0, 0, 0, 0];
+    const maximum: [number, number, number, number] = [0, 0, 0, 0];
+    for (let pieceIndex = 0; pieceIndex < puzzle.pieces.length; pieceIndex += 1) {
+      if (isPieceUsed(pieceIndex)) {
+        continue;
+      }
+      const pieceMinimum: [number, number, number, number] = [Number.POSITIVE_INFINITY, Number.POSITIVE_INFINITY, Number.POSITIVE_INFINITY, Number.POSITIVE_INFINITY];
+      const pieceMaximum: [number, number, number, number] = [0, 0, 0, 0];
+      let hasCandidate = false;
+      for (const candidate of candidatesByPiece.get(pieceIndex) ?? []) {
+        if (!canUseCandidate(candidate)) {
+          continue;
+        }
+        hasCandidate = true;
+        for (let color = 0; color < 4; color += 1) {
+          pieceMinimum[color] = Math.min(pieceMinimum[color], candidate.colorCounts[color]);
+          pieceMaximum[color] = Math.max(pieceMaximum[color], candidate.colorCounts[color]);
+        }
+      }
+      if (!hasCandidate) {
+        return true;
+      }
+      for (let color = 0; color < 4; color += 1) {
+        minimum[color] += pieceMinimum[color];
+        maximum[color] += pieceMaximum[color];
+      }
+    }
+    return needed.some((count, color) => count < minimum[color] || count > maximum[color]);
+  };
+
+  const isPrunedState = (): boolean => {
+    if (options.heuristics.partialBoardCacheEntries > 0 && partialDeadSet.has(partialStateKey())) {
+      return true;
+    }
+    if (options.heuristics.isolatedRegionPruning && hasInvalidEmptyRegion()) {
+      return true;
+    }
+    if (options.heuristics.zeroCandidatePruning && hasEmptyCellWithoutCandidate()) {
+      return true;
+    }
+    return options.heuristics.colorBalancePruning && hasImpossibleColorBalance();
   };
 
   const legalCandidatesForCell = (cellIndex: number): readonly Candidate[] => {
@@ -158,7 +336,7 @@ export function createSolver(puzzle: PuzzleDefinition, options: SolverOptions, i
 
   const chooseFrame = (appliedCandidate: Candidate | null): Frame => {
     const key = stateKey();
-    if (deadSet.has(key)) {
+    if (deadSet.has(key) || isPrunedState()) {
       return { stateKey: key, appliedCandidate, candidates: [], nextCandidateIndex: 0 };
     }
     let bestCell: number | null = null;

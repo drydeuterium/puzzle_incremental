@@ -67,6 +67,10 @@ export type SolverHeuristics = Readonly<{
   candidateOrdering: boolean;
   symmetryPruning: boolean;
   deadStateCacheEntries: number;
+  isolatedRegionPruning: boolean;
+  zeroCandidatePruning: boolean;
+  colorBalancePruning: boolean;
+  partialBoardCacheEntries: number;
 }>;
 
 export type SolverOptions = Readonly<{
@@ -101,6 +105,10 @@ export type UpgradeId =
   | "candidate-ordering"
   | "symmetry-pruning"
   | "dead-state-cache"
+  | "isolated-region-pruning"
+  | "zero-candidate-pruning"
+  | "color-balance-pruning"
+  | "partial-board-cache"
   | "parallel-solvers"
   | "tier-1"
   | "tier-2"

@@ -12,6 +12,10 @@ const options: SolverOptions = {
     candidateOrdering: false,
     symmetryPruning: true,
     deadStateCacheEntries: 0,
+    isolatedRegionPruning: false,
+    zeroCandidatePruning: false,
+    colorBalancePruning: false,
+    partialBoardCacheEntries: 0,
   },
 };
 

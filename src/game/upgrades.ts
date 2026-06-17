@@ -70,8 +70,12 @@ export function isAutoSolverReady(levels: UpgradeState, statistics: Statistics, 
     && manualClearsForTier(statistics, tier) >= GAME_CONFIG.solver.manualClearsRequiredByTierForAutoSolver;
 }
 
-export function solverOptionsFromUpgrades(levels: UpgradeState, visualization: SolverOptions["visualization"]): SolverOptions {
+const HIGH_TIER_SOLVER_MIN_TIER = 7;
+
+export function solverOptionsFromUpgrades(levels: UpgradeState, visualization: SolverOptions["visualization"], tier = 0): SolverOptions {
   const cacheLevel = levels["dead-state-cache"] ?? 0;
+  const partialCacheLevel = levels["partial-board-cache"] ?? 0;
+  const highTierHeuristicsEnabled = tier >= HIGH_TIER_SOLVER_MIN_TIER;
   return {
     nodesPerSecond: nodesPerSecond(levels),
     visualization,
@@ -80,6 +84,10 @@ export function solverOptionsFromUpgrades(levels: UpgradeState, visualization: S
       candidateOrdering: (levels["candidate-ordering"] ?? 0) > 0,
       symmetryPruning: (levels["symmetry-pruning"] ?? 0) > 0,
       deadStateCacheEntries: GAME_CONFIG.cacheEntriesByLevel[cacheLevel] ?? 0,
+      isolatedRegionPruning: highTierHeuristicsEnabled && (levels["isolated-region-pruning"] ?? 0) > 0,
+      zeroCandidatePruning: highTierHeuristicsEnabled && (levels["zero-candidate-pruning"] ?? 0) > 0,
+      colorBalancePruning: highTierHeuristicsEnabled && (levels["color-balance-pruning"] ?? 0) > 0,
+      partialBoardCacheEntries: highTierHeuristicsEnabled ? GAME_CONFIG.partialBoardCacheEntriesByLevel[partialCacheLevel] ?? 0 : 0,
     },
   };
 }

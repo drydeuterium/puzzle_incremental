@@ -18,6 +18,27 @@ describe("upgrades", () => {
     expect(options.heuristics.deadStateCacheEntries).toBe(2000);
   });
 
+  it("enables high-tier pruning only on tier seven and above", () => {
+    const levels = {
+      ...initialUpgradeState(),
+      "isolated-region-pruning": 1,
+      "zero-candidate-pruning": 1,
+      "color-balance-pruning": 1,
+      "partial-board-cache": 2,
+    };
+    const tierSixOptions = solverOptionsFromUpgrades(levels, "off", 6);
+    expect(tierSixOptions.heuristics.isolatedRegionPruning).toBe(false);
+    expect(tierSixOptions.heuristics.zeroCandidatePruning).toBe(false);
+    expect(tierSixOptions.heuristics.colorBalancePruning).toBe(false);
+    expect(tierSixOptions.heuristics.partialBoardCacheEntries).toBe(0);
+
+    const tierSevenOptions = solverOptionsFromUpgrades(levels, "off", 7);
+    expect(tierSevenOptions.heuristics.isolatedRegionPruning).toBe(true);
+    expect(tierSevenOptions.heuristics.zeroCandidatePruning).toBe(true);
+    expect(tierSevenOptions.heuristics.colorBalancePruning).toBe(true);
+    expect(tierSevenOptions.heuristics.partialBoardCacheEntries).toBe(4000);
+  });
+
   it("unlocks tiers through the linear chain", () => {
     const levels = {
       ...initialUpgradeState(),

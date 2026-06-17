@@ -54,7 +54,7 @@ function makeTier(input: TierInput): TierConfig {
 }
 
 export const GAME_CONFIG = {
-  gameConfigVersion: "1.5.0-economy-rebalance",
+  gameConfigVersion: "1.6.0-high-tier-pruning",
   generatorVersion: 6,
   currency: {
     name: "Compute",
@@ -126,10 +126,15 @@ export const GAME_CONFIG = {
     { id: "parallel-solvers", name: "Parallel Solvers", maxLevel: 3, basePrice: 52000, priceMultiplier: 4.5, prerequisites: ["auto-solver"] },
     { id: "candidate-ordering", name: "Candidate Ordering", maxLevel: 1, basePrice: 72000, priceMultiplier: 1, prerequisites: ["constraint-ordering"] },
     { id: "tier-7", name: "Tier 7", maxLevel: 1, basePrice: 90000, priceMultiplier: 1, prerequisites: ["tier-6"] },
+    { id: "isolated-region-pruning", name: "Isolated Region Pruning", maxLevel: 1, basePrice: 130000, priceMultiplier: 1, prerequisites: ["tier-7", "constraint-ordering"] },
+    { id: "zero-candidate-pruning", name: "Zero Candidate Pruning", maxLevel: 1, basePrice: 170000, priceMultiplier: 1, prerequisites: ["isolated-region-pruning"] },
     { id: "tier-8", name: "Tier 8", maxLevel: 1, basePrice: 190000, priceMultiplier: 1, prerequisites: ["tier-7"] },
+    { id: "color-balance-pruning", name: "Color Balance Pruning", maxLevel: 1, basePrice: 260000, priceMultiplier: 1, prerequisites: ["tier-8", "zero-candidate-pruning"] },
+    { id: "partial-board-cache", name: "Partial Board Cache", maxLevel: 4, basePrice: 320000, priceMultiplier: 3.1, prerequisites: ["tier-8", "dead-state-cache"] },
     { id: "tier-9", name: "Tier 9", maxLevel: 1, basePrice: 420000, priceMultiplier: 1, prerequisites: ["tier-8"] },
   ] satisfies readonly UpgradeConfig[],
   cacheEntriesByLevel: [0, 500, 2000, 8000, 32000, 128000],
+  partialBoardCacheEntriesByLevel: [0, 1000, 4000, 16000, 64000],
 } as const;
 
 export const ALL_UPGRADE_IDS = GAME_CONFIG.upgrades.map((upgrade) => upgrade.id);
