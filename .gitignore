@@ -3,6 +3,7 @@ dist/
 coverage/
 test-results/
 playwright-report/
+codex/cheat-save.json
 .env
 .env.*
 *.tsbuildinfo
