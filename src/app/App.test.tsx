@@ -212,7 +212,7 @@ function seedContradictionDetector(): void {
   window.localStorage.setItem(BACKUP_SAVE_KEY, JSON.stringify(save));
 }
 
-function seedAutoSolverProgress(manualClears: number): void {
+function seedAutoSolverProgress(manualClears: number, parallelSolverLevel = 0): void {
   const now = new Date("2026-01-01T00:00:00.000Z");
   const base = createInitialSave(now);
   const save = {
@@ -223,6 +223,7 @@ function seedAutoSolverProgress(manualClears: number): void {
       upgradeLevels: {
         ...base.progression.upgradeLevels,
         "auto-solver": 1,
+        "parallel-solvers": parallelSolverLevel,
       },
     },
     statistics: {
@@ -572,7 +573,7 @@ describe("App", () => {
   });
 
   it("starts auto solver work on a mini solver lane", async () => {
-    seedAutoSolverProgress(5);
+    seedAutoSolverProgress(5, 1);
     const user = userEvent.setup();
     const postMessages: unknown[] = [];
     class FakeWorker {
@@ -591,6 +592,7 @@ describe("App", () => {
     await user.click(screen.getByRole("button", { name: "Start Solver" }));
 
     expect(screen.getByTestId("solver-run")).toHaveTextContent("Tier 0");
+    expect(screen.getByText("Idle lane")).toBeInTheDocument();
     expect(screen.getByRole("grid", { name: "Puzzle board" })).toBeInTheDocument();
     expect(postMessages).toHaveLength(1);
     expect(postMessages[0]).toMatchObject({ type: "START" });

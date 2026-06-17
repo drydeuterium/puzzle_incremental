@@ -24,6 +24,7 @@ type RuntimePuzzle = Readonly<{
 type SolverRun = Readonly<{
   sessionId: SolverSessionId;
   puzzle: PuzzleDefinition;
+  laneIndex: number;
   status: SolverStats["status"];
   stats: SolverStats | null;
   preview: readonly Placement[];
@@ -37,6 +38,7 @@ type ComputeRateSample = Readonly<{
 type SolverRunSession = Readonly<{
   sessionId: SolverSessionId;
   puzzle: PuzzleDefinition;
+  laneIndex: number;
 }>;
 
 type UpgradeTabId = "feature" | "tier" | "solver";
@@ -284,6 +286,7 @@ const COPY = {
     autoNext: "Auto next",
     lanesFull: "Solver lanes are full.",
     noSolverRuns: "No solver puzzles.",
+    solverLaneIdle: "Idle lane",
     startSolver: "Start Solver",
     pause: "Pause",
     resume: "Resume",
@@ -441,6 +444,7 @@ const COPY = {
     autoNext: "自動次パズル",
     lanesFull: "ソルバー盤面が埋まっています。",
     noSolverRuns: "ソルバー用パズルなし",
+    solverLaneIdle: "待機レーン",
     startSolver: "ソルバー開始",
     pause: "一時停止",
     resume: "再開",
@@ -799,9 +803,7 @@ function isActiveSolverStatus(status: SolverStats["status"]): boolean {
 }
 
 function trimSolverRuns(runs: readonly SolverRun[]): readonly SolverRun[] {
-  const active = runs.filter((run) => isActiveSolverStatus(run.status));
-  const completed = runs.filter((run) => !isActiveSolverStatus(run.status)).slice(-2);
-  return [...completed, ...active];
+  return runs.filter((run) => isActiveSolverStatus(run.status)).sort((a, b) => a.laneIndex - b.laneIndex);
 }
 
 function mergeRunningPreview(current: readonly Placement[], incoming: readonly Placement[] | undefined, status: SolverStats["status"]): readonly Placement[] {
@@ -1150,6 +1152,7 @@ function reducer(state: AppState, action: Action): AppState {
             ...action.sessions.map((session): SolverRun => ({
               sessionId: session.sessionId,
               puzzle: session.puzzle,
+              laneIndex: session.laneIndex,
               status: "running",
               stats: null,
               preview: [],
@@ -1563,6 +1566,7 @@ export function App() {
   const language = state.save.settings.language ?? "en";
   const copy = COPY[language];
   const upgradeLevels = state.save.progression.upgradeLevels;
+  const solverParallelSessions = parallelSessions(upgradeLevels);
   const visibleUpgradeTabs = UPGRADE_TABS.filter((tab) => !hideCompletedUpgradeTabs || !isUpgradeTabComplete(upgradeLevels, tab));
   const selectedUpgradeTab = visibleUpgradeTabs.includes(activeUpgradeTab)
     ? activeUpgradeTab
@@ -1584,7 +1588,7 @@ export function App() {
   const autoSolverLockMessage = (state.save.progression.upgradeLevels["auto-solver"] ?? 0) <= 0
     ? copy.autoSolverLocked
     : copy.autoSolverManualLocked(state.solver.autoTier, manualClearsAutoTier, autoSolverRequiredManualClears);
-  const solverLaneCapacity = Math.max(0, parallelSessions(state.save.progression.upgradeLevels) - state.solver.activeSessions);
+  const solverLaneCapacity = Math.max(0, solverParallelSessions - state.solver.activeSessions);
   const solverPayoutMultiplier = automatedRewardMultiplier(state.save.progression.upgradeLevels);
 
   const handleWorkerMessage = useCallback((message: WorkerResponse) => {
@@ -1636,14 +1640,18 @@ export function App() {
     }
     const worker = ensureWorker();
     const stamp = Date.now();
+    const laneCount = parallelSessions(state.save.progression.upgradeLevels);
+    const usedLaneIndices = new Set(state.solver.runs.filter((run) => isActiveSolverStatus(run.status)).map((run) => run.laneIndex));
+    const freeLaneIndices = Array.from({ length: laneCount }, (_, laneIndex) => laneIndex).filter((laneIndex) => !usedLaneIndices.has(laneIndex));
     const sessions = puzzles.map((automatedPuzzle, index): SolverRunSession => {
       const sessionId = `auto-${automatedPuzzle.tier}-${automatedPuzzle.seed}-${stamp}-${index}`;
+      const laneIndex = freeLaneIndices[index] ?? index % Math.max(1, laneCount);
       solverSessionsRef.current.set(sessionId, automatedPuzzle);
       worker.post({ type: "START", sessionId, puzzle: automatedPuzzle, options: solverOptionsFromUpgrades(state.save.progression.upgradeLevels, state.save.settings.visualization) });
-      return { sessionId, puzzle: automatedPuzzle };
+      return { sessionId, puzzle: automatedPuzzle, laneIndex };
     });
     dispatch({ type: "solver-runs-started", sessions });
-  }, [ensureWorker, state.save.progression.upgradeLevels, state.save.settings.visualization]);
+  }, [ensureWorker, state.save.progression.upgradeLevels, state.save.settings.visualization, state.solver.runs]);
 
   useEffect(() => {
     if (!state.solver.autoNext || !autoSolverReady || solverLaneCapacity <= 0) {
@@ -1897,6 +1905,8 @@ export function App() {
   const invalidPreview = Boolean(selectedPlacementPreview && !selectedPlacementPreview.validation.ok);
   const showSolverPreview = state.solver.status === "running" || state.solver.status === "paused";
   const solverPreviewCells = new Set(showSolverPreview ? state.solver.preview.flatMap((placement) => placement.cellIndices) : []);
+  const activeSolverRuns = state.solver.runs.filter((run) => isActiveSolverStatus(run.status));
+  const solverRunSlots = Array.from({ length: solverParallelSessions }, (_, laneIndex) => activeSolverRuns.find((run) => run.laneIndex === laneIndex) ?? null);
 
   const theme = state.save.settings.theme ?? "system";
   const appClassName = ["app", state.save.settings.highContrast ? "high-contrast" : "", theme === "dark" ? "dark" : "", theme === "light" ? "light" : ""].filter(Boolean).join(" ");
@@ -2060,11 +2070,18 @@ export function App() {
           <section className="panel solver-lane" aria-label={copy.solverLanes}>
             <div className="solver-lane-header">
               <h2>{copy.solverLanes}</h2>
-              <span>{state.solver.activeSessions}/{parallelSessions(state.save.progression.upgradeLevels)}</span>
+              <span>{state.solver.activeSessions}/{solverParallelSessions}</span>
             </div>
-            <div className="solver-run-list">
-              {state.solver.runs.length === 0 && <p className="empty-state">{copy.noSolverRuns}</p>}
-              {state.solver.runs.map((run) => <MiniSolverBoard key={run.sessionId} run={run} language={language} copy={copy} />)}
+            <div
+              className={`solver-run-list ${activeSolverRuns.length > 0 ? "has-active-runs" : ""}`}
+              style={{ "--solver-lane-count": solverParallelSessions } as React.CSSProperties}
+            >
+              {activeSolverRuns.length === 0 && <p className="empty-state">{copy.noSolverRuns}</p>}
+              {activeSolverRuns.length > 0 && solverRunSlots.map((run, laneIndex) => (
+                run
+                  ? <MiniSolverBoard key={run.sessionId} run={run} language={language} copy={copy} />
+                  : <article className="solver-run solver-run-placeholder" key={`solver-lane-${laneIndex}`}><span>{copy.solverLaneIdle}</span></article>
+              ))}
             </div>
           </section>
         </section>
@@ -2087,7 +2104,7 @@ export function App() {
               <span>{copy.theoryNodesPerSecond}</span><strong>{formatNumber(nodesPerSecond(state.save.progression.upgradeLevels), language)}</strong>
               <span>{copy.depth}</span><strong>{state.solver.stats?.currentDepth ?? 0}</strong>
               <span>{copy.autoTier}</span><strong>{copy.tier} {state.solver.autoTier}</strong>
-              <span>{copy.parallel}</span><strong>{parallelSessions(state.save.progression.upgradeLevels)}</strong>
+              <span>{copy.parallel}</span><strong>{solverParallelSessions}</strong>
               <span>{copy.manualUnlock}</span><strong>{Math.min(manualClearsAutoTier, autoSolverRequiredManualClears)}/{autoSolverRequiredManualClears}</strong>
               <span>{copy.solverPayout}</span><strong>{solverPayoutMultiplier.toFixed(2)}x</strong>
             </div>

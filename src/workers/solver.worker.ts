@@ -35,12 +35,14 @@ function runSlice(sessionId: SolverSessionId): void {
     sessions.delete(sessionId);
     return;
   }
-  const visualInterval = session.options.visualization === "on" ? 100 : session.options.visualization === "reduced" ? 500 : Number.POSITIVE_INFINITY;
+  const visualInterval = session.options.visualization === "on"
+    ? 1000 / GAME_CONFIG.solver.visualizationMaxFps
+    : session.options.visualization === "reduced"
+      ? 1000
+      : Number.POSITIVE_INFINITY;
   if (now - session.lastVisualAt >= visualInterval) {
     session.lastVisualAt = now;
     send({ type: "PROGRESS", sessionId, stats: result.stats, placements: result.preview });
-  } else {
-    send({ type: "PROGRESS", sessionId, stats: result.stats });
   }
   session.timer = self.setTimeout(() => runSlice(sessionId), GAME_CONFIG.solver.workerQuantumMilliseconds);
 }
