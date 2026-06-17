@@ -429,7 +429,7 @@ button:disabled {
 
 .solver-run-list {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 8px;
   align-content: start;
   min-height: 0;
@@ -437,10 +437,6 @@ button:disabled {
   overflow-y: auto;
   padding-right: 4px;
   scrollbar-gutter: stable;
-}
-
-.solver-run-list.has-active-runs {
-  grid-template-columns: repeat(var(--solver-lane-count), minmax(150px, 1fr));
 }
 
 .solver-run {
@@ -463,6 +459,10 @@ button:disabled {
   border-style: dashed;
   color: var(--muted);
   background: color-mix(in srgb, var(--surface) 72%, transparent);
+}
+
+.solver-run-unassigned {
+  opacity: 0.62;
 }
 
 .solver-run-header,

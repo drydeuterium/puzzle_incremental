@@ -568,7 +568,8 @@ describe("App", () => {
     render(<App />);
     expect(screen.getByRole("button", { name: "Start Solver" })).toBeEnabled();
     expect(screen.getByRole("button", { name: "Auto next: Off" })).toBeEnabled();
-    expect(screen.getByText("No solver puzzles.")).toBeInTheDocument();
+    expect(screen.getByText("Idle lane")).toBeInTheDocument();
+    expect(screen.getAllByText("Unassigned")).toHaveLength(3);
     expect(screen.getByText("5/5")).toBeInTheDocument();
   });
 
@@ -593,6 +594,7 @@ describe("App", () => {
 
     expect(screen.getByTestId("solver-run")).toHaveTextContent("Tier 0");
     expect(screen.getByText("Idle lane")).toBeInTheDocument();
+    expect(screen.getAllByText("Unassigned")).toHaveLength(2);
     expect(screen.getByRole("grid", { name: "Puzzle board" })).toBeInTheDocument();
     expect(postMessages).toHaveLength(1);
     expect(postMessages[0]).toMatchObject({ type: "START" });

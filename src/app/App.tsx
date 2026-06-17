@@ -48,6 +48,8 @@ type PendingConfirmation =
   | Readonly<{ type: "new-puzzle"; daily: boolean }>
   | Readonly<{ type: "switch-tier"; tier: number; timestamp: number }>;
 
+const SOLVER_LANE_SLOT_COUNT = 4;
+
 type SolverUiState = Readonly<{
   status: SolverStats["status"];
   sessionId: SolverSessionId | null;
@@ -287,6 +289,7 @@ const COPY = {
     lanesFull: "Solver lanes are full.",
     noSolverRuns: "No solver puzzles.",
     solverLaneIdle: "Idle lane",
+    solverLaneUnassigned: "Unassigned",
     startSolver: "Start Solver",
     pause: "Pause",
     resume: "Resume",
@@ -445,6 +448,7 @@ const COPY = {
     lanesFull: "ソルバー盤面が埋まっています。",
     noSolverRuns: "ソルバー用パズルなし",
     solverLaneIdle: "待機レーン",
+    solverLaneUnassigned: "割り当てなし",
     startSolver: "ソルバー開始",
     pause: "一時停止",
     resume: "再開",
@@ -1906,7 +1910,7 @@ export function App() {
   const showSolverPreview = state.solver.status === "running" || state.solver.status === "paused";
   const solverPreviewCells = new Set(showSolverPreview ? state.solver.preview.flatMap((placement) => placement.cellIndices) : []);
   const activeSolverRuns = state.solver.runs.filter((run) => isActiveSolverStatus(run.status));
-  const solverRunSlots = Array.from({ length: solverParallelSessions }, (_, laneIndex) => activeSolverRuns.find((run) => run.laneIndex === laneIndex) ?? null);
+  const solverRunSlots = Array.from({ length: SOLVER_LANE_SLOT_COUNT }, (_, laneIndex) => activeSolverRuns.find((run) => run.laneIndex === laneIndex) ?? null);
 
   const theme = state.save.settings.theme ?? "system";
   const appClassName = ["app", state.save.settings.highContrast ? "high-contrast" : "", theme === "dark" ? "dark" : "", theme === "light" ? "light" : ""].filter(Boolean).join(" ");
@@ -2072,16 +2076,21 @@ export function App() {
               <h2>{copy.solverLanes}</h2>
               <span>{state.solver.activeSessions}/{solverParallelSessions}</span>
             </div>
-            <div
-              className={`solver-run-list ${activeSolverRuns.length > 0 ? "has-active-runs" : ""}`}
-              style={{ "--solver-lane-count": solverParallelSessions } as React.CSSProperties}
-            >
-              {activeSolverRuns.length === 0 && <p className="empty-state">{copy.noSolverRuns}</p>}
-              {activeSolverRuns.length > 0 && solverRunSlots.map((run, laneIndex) => (
-                run
-                  ? <MiniSolverBoard key={run.sessionId} run={run} language={language} copy={copy} />
-                  : <article className="solver-run solver-run-placeholder" key={`solver-lane-${laneIndex}`}><span>{copy.solverLaneIdle}</span></article>
-              ))}
+            <div className="solver-run-list">
+              {solverRunSlots.map((run, laneIndex) => {
+                if (run) {
+                  return <MiniSolverBoard key={run.sessionId} run={run} language={language} copy={copy} />;
+                }
+                const isUnlockedLane = laneIndex < solverParallelSessions;
+                return (
+                  <article
+                    className={`solver-run solver-run-placeholder ${isUnlockedLane ? "" : "solver-run-unassigned"}`}
+                    key={`solver-lane-${laneIndex}`}
+                  >
+                    <span>{isUnlockedLane ? copy.solverLaneIdle : copy.solverLaneUnassigned}</span>
+                  </article>
+                );
+              })}
             </div>
           </section>
         </section>
