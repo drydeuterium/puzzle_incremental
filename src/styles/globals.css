@@ -808,6 +808,24 @@ button:disabled {
   gap: 6px;
 }
 
+.setting-range-field {
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--surface-2);
+}
+
+.setting-range-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.setting-range-field input[type="range"] {
+  width: 100%;
+}
+
 .setting-toggle-row {
   display: flex;
   align-items: center;

@@ -7,8 +7,12 @@ import { enumerateOrientations, TETROMINO_TYPES } from "../core/tetrominoes";
 import type { BoardState, ClearClassification, PieceInstance, Placement, PlacementValidation, PuzzleDefinition, SaveDataV1, SolverSessionId, SolverStats, UpgradeId } from "../core/types";
 import { GAME_CONFIG } from "../game/config";
 import {
-  SOLVER_LANE_MIN_SESSION_MS_OPTIONS,
-  SOLVER_LANE_PREVIEW_UPDATE_MS_OPTIONS,
+  SOLVER_LANE_MIN_SESSION_MS_MAX,
+  SOLVER_LANE_MIN_SESSION_MS_MIN,
+  SOLVER_LANE_MIN_SESSION_MS_STEP,
+  SOLVER_LANE_PREVIEW_UPDATE_MS_MAX,
+  SOLVER_LANE_PREVIEW_UPDATE_MS_MIN,
+  SOLVER_LANE_PREVIEW_UPDATE_MS_STEP,
   normalizeSolverLaneMinSessionMs,
   normalizeSolverLanePreviewUpdateMs,
 } from "../game/settings";
@@ -2384,19 +2388,35 @@ export function App() {
                 <option value="off">{copy.off}</option>
               </select>
             </label>
-            <label className="setting-field">{copy.solverLaneHoldTime}
-              <select value={state.save.settings.solverLaneMinSessionMs} onChange={(event) => dispatch({ type: "set-solver-lane-min-session-ms", value: Number(event.target.value) })}>
-                {SOLVER_LANE_MIN_SESSION_MS_OPTIONS.map((milliseconds) => (
-                  <option key={milliseconds} value={milliseconds}>{formatMilliseconds(milliseconds)}</option>
-                ))}
-              </select>
+            <label className="setting-field setting-range-field">
+              <span className="setting-range-header">
+                <span>{copy.solverLaneHoldTime}</span>
+                <strong>{formatMilliseconds(state.save.settings.solverLaneMinSessionMs)}</strong>
+              </span>
+              <input
+                aria-label={copy.solverLaneHoldTime}
+                type="range"
+                min={SOLVER_LANE_MIN_SESSION_MS_MIN}
+                max={SOLVER_LANE_MIN_SESSION_MS_MAX}
+                step={SOLVER_LANE_MIN_SESSION_MS_STEP}
+                value={state.save.settings.solverLaneMinSessionMs}
+                onChange={(event) => dispatch({ type: "set-solver-lane-min-session-ms", value: Number(event.target.value) })}
+              />
             </label>
-            <label className="setting-field">{copy.solverLaneUpdateInterval}
-              <select value={state.save.settings.solverLanePreviewUpdateMs} onChange={(event) => dispatch({ type: "set-solver-lane-preview-update-ms", value: Number(event.target.value) })}>
-                {SOLVER_LANE_PREVIEW_UPDATE_MS_OPTIONS.map((milliseconds) => (
-                  <option key={milliseconds} value={milliseconds}>{formatMilliseconds(milliseconds)}</option>
-                ))}
-              </select>
+            <label className="setting-field setting-range-field">
+              <span className="setting-range-header">
+                <span>{copy.solverLaneUpdateInterval}</span>
+                <strong>{formatMilliseconds(state.save.settings.solverLanePreviewUpdateMs)}</strong>
+              </span>
+              <input
+                aria-label={copy.solverLaneUpdateInterval}
+                type="range"
+                min={SOLVER_LANE_PREVIEW_UPDATE_MS_MIN}
+                max={SOLVER_LANE_PREVIEW_UPDATE_MS_MAX}
+                step={SOLVER_LANE_PREVIEW_UPDATE_MS_STEP}
+                value={state.save.settings.solverLanePreviewUpdateMs}
+                onChange={(event) => dispatch({ type: "set-solver-lane-preview-update-ms", value: Number(event.target.value) })}
+              />
             </label>
             <label className="setting-toggle-row">
               <span>{copy.highContrast}</span>

@@ -498,15 +498,17 @@ describe("App", () => {
     expect(screen.getByLabelText("Solver lane hold")).toHaveValue("1000");
     expect(screen.getByLabelText("Solver preview interval")).toHaveValue("250");
 
-    await user.selectOptions(screen.getByLabelText("Solver lane hold"), "2500");
-    await user.selectOptions(screen.getByLabelText("Solver preview interval"), "750");
+    fireEvent.change(screen.getByLabelText("Solver lane hold"), { target: { value: "2350" } });
+    fireEvent.change(screen.getByLabelText("Solver preview interval"), { target: { value: "725" } });
 
-    expect(screen.getByLabelText("Solver lane hold")).toHaveValue("2500");
-    expect(screen.getByLabelText("Solver preview interval")).toHaveValue("750");
+    expect(screen.getByLabelText("Solver lane hold")).toHaveValue("2350");
+    expect(screen.getByLabelText("Solver preview interval")).toHaveValue("725");
+    expect(screen.getByText("2350ms")).toBeInTheDocument();
+    expect(screen.getByText("725ms")).toBeInTheDocument();
     await waitFor(() => {
       const saved = JSON.parse(window.localStorage.getItem(SAVE_KEY) ?? "{}");
-      expect(saved.settings.solverLaneMinSessionMs).toBe(2500);
-      expect(saved.settings.solverLanePreviewUpdateMs).toBe(750);
+      expect(saved.settings.solverLaneMinSessionMs).toBe(2350);
+      expect(saved.settings.solverLanePreviewUpdateMs).toBe(725);
     });
   });
 
