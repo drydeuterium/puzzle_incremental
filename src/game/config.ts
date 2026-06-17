@@ -2,7 +2,8 @@ import type { UpgradeId } from "../core/types";
 
 export type ShapeConfig = Readonly<{
   style: "jagged";
-  interiorBlockedCellCount: number;
+  interiorBlockedCellCount?: number;
+  interiorBlockedCellRatio?: number;
 }>;
 
 export type TierConfig = Readonly<{
@@ -26,9 +27,35 @@ export type UpgradeConfig = Readonly<{
   prerequisites: readonly UpgradeId[];
 }>;
 
+const DEFAULT_INTERIOR_BLOCKED_CELL_RATIO = 0.4;
+
+type TierInput = Omit<TierConfig, "allowedBlockedCellCounts" | "shape"> & Readonly<{
+  shape?: "jagged";
+  interiorBlockedCellRatio?: number;
+}>;
+
+function blockedCellCountFor(width: number, height: number, pieceCount: number): number {
+  const blockedCount = width * height - pieceCount * 4;
+  if (blockedCount < 0) {
+    throw new Error(`Tier board area ${width}x${height} is too small for ${pieceCount} pieces`);
+  }
+  return blockedCount;
+}
+
+function makeTier(input: TierInput): TierConfig {
+  const allowedBlockedCellCounts = [blockedCellCountFor(input.width, input.height, input.pieceCount)];
+  return {
+    ...input,
+    allowedBlockedCellCounts,
+    shape: input.shape === "jagged"
+      ? { style: "jagged", interiorBlockedCellRatio: input.interiorBlockedCellRatio ?? DEFAULT_INTERIOR_BLOCKED_CELL_RATIO }
+      : undefined,
+  };
+}
+
 export const GAME_CONFIG = {
-  gameConfigVersion: "1.3.0-shape-complexity",
-  generatorVersion: 4,
+  gameConfigVersion: "1.4.0-hole-rebalance",
+  generatorVersion: 5,
   currency: {
     name: "Compute",
     symbol: "C",
@@ -66,16 +93,16 @@ export const GAME_CONFIG = {
     undoHistoryLimit: 100,
   },
   tiers: [
-    { id: 0, width: 4, height: 4, pieceCount: 4, allowedBlockedCellCounts: [0], difficultyScoreMin: 1, difficultyScoreMax: 180, unlockUpgradeId: null },
-    { id: 1, width: 5, height: 5, pieceCount: 6, allowedBlockedCellCounts: [1], shape: { style: "jagged", interiorBlockedCellCount: 1 }, difficultyScoreMin: 20, difficultyScoreMax: 320, unlockUpgradeId: "tier-1" },
-    { id: 2, width: 7, height: 4, pieceCount: 6, allowedBlockedCellCounts: [4], shape: { style: "jagged", interiorBlockedCellCount: 1 }, difficultyScoreMin: 40, difficultyScoreMax: 360, unlockUpgradeId: "tier-2" },
-    { id: 3, width: 6, height: 5, pieceCount: 7, allowedBlockedCellCounts: [2], shape: { style: "jagged", interiorBlockedCellCount: 1 }, difficultyScoreMin: 55, difficultyScoreMax: 420, unlockUpgradeId: "tier-3" },
-    { id: 4, width: 7, height: 6, pieceCount: 8, allowedBlockedCellCounts: [10], shape: { style: "jagged", interiorBlockedCellCount: 3 }, difficultyScoreMin: 70, difficultyScoreMax: 500, unlockUpgradeId: "tier-4" },
-    { id: 5, width: 7, height: 6, pieceCount: 9, allowedBlockedCellCounts: [6], shape: { style: "jagged", interiorBlockedCellCount: 2 }, difficultyScoreMin: 90, difficultyScoreMax: 580, unlockUpgradeId: "tier-5" },
-    { id: 6, width: 7, height: 7, pieceCount: 10, allowedBlockedCellCounts: [9], shape: { style: "jagged", interiorBlockedCellCount: 3 }, difficultyScoreMin: 110, difficultyScoreMax: 680, unlockUpgradeId: "tier-6" },
-    { id: 7, width: 8, height: 7, pieceCount: 11, allowedBlockedCellCounts: [12], shape: { style: "jagged", interiorBlockedCellCount: 4 }, difficultyScoreMin: 130, difficultyScoreMax: 800, unlockUpgradeId: "tier-7" },
-    { id: 8, width: 8, height: 7, pieceCount: 12, allowedBlockedCellCounts: [8], shape: { style: "jagged", interiorBlockedCellCount: 3 }, difficultyScoreMin: 150, difficultyScoreMax: 920, unlockUpgradeId: "tier-8" },
-    { id: 9, width: 10, height: 8, pieceCount: 16, allowedBlockedCellCounts: [16], shape: { style: "jagged", interiorBlockedCellCount: 5 }, difficultyScoreMin: 190, difficultyScoreMax: 1200, unlockUpgradeId: "tier-9" },
+    makeTier({ id: 0, width: 4, height: 4, pieceCount: 4, difficultyScoreMin: 1, difficultyScoreMax: 180, unlockUpgradeId: null }),
+    makeTier({ id: 1, width: 4, height: 8, pieceCount: 6, shape: "jagged", difficultyScoreMin: 20, difficultyScoreMax: 320, unlockUpgradeId: "tier-1" }),
+    makeTier({ id: 2, width: 5, height: 7, pieceCount: 6, shape: "jagged", difficultyScoreMin: 40, difficultyScoreMax: 360, unlockUpgradeId: "tier-2" }),
+    makeTier({ id: 3, width: 6, height: 6, pieceCount: 7, shape: "jagged", difficultyScoreMin: 55, difficultyScoreMax: 420, unlockUpgradeId: "tier-3" }),
+    makeTier({ id: 4, width: 6, height: 7, pieceCount: 8, shape: "jagged", difficultyScoreMin: 70, difficultyScoreMax: 500, unlockUpgradeId: "tier-4" }),
+    makeTier({ id: 5, width: 7, height: 7, pieceCount: 9, shape: "jagged", difficultyScoreMin: 90, difficultyScoreMax: 580, unlockUpgradeId: "tier-5" }),
+    makeTier({ id: 6, width: 7, height: 8, pieceCount: 10, shape: "jagged", difficultyScoreMin: 110, difficultyScoreMax: 680, unlockUpgradeId: "tier-6" }),
+    makeTier({ id: 7, width: 7, height: 9, pieceCount: 11, shape: "jagged", difficultyScoreMin: 130, difficultyScoreMax: 800, unlockUpgradeId: "tier-7" }),
+    makeTier({ id: 8, width: 8, height: 8, pieceCount: 12, shape: "jagged", difficultyScoreMin: 150, difficultyScoreMax: 920, unlockUpgradeId: "tier-8" }),
+    makeTier({ id: 9, width: 9, height: 10, pieceCount: 16, shape: "jagged", difficultyScoreMin: 190, difficultyScoreMax: 1200, unlockUpgradeId: "tier-9" }),
   ] satisfies readonly TierConfig[],
   upgrades: [
     { id: "placement-scanner", name: "Placement Scanner", maxLevel: 1, basePrice: 120, priceMultiplier: 1, prerequisites: [] },

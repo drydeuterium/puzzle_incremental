@@ -109,13 +109,15 @@ describe("generation and rewards", () => {
     expect(tier0Types.size).toBeGreaterThanOrEqual(3);
 
     const planned = [
-      { tier: 1, seed: "five-by-five-hole", width: 5, height: 5, blocked: 1, interiorBlocked: 1, usable: 24, pieces: 6 },
-      { tier: 2, seed: "seven-by-four-jagged", width: 7, height: 4, blocked: 4, interiorBlocked: 1, usable: 24, pieces: 6 },
-      { tier: 3, seed: "six-by-five-jagged", width: 6, height: 5, blocked: 2, interiorBlocked: 1, usable: 28, pieces: 7 },
-      { tier: 4, seed: "seven-by-six-jagged", width: 7, height: 6, blocked: 10, interiorBlocked: 3, usable: 32, pieces: 8 },
-      { tier: 6, seed: "seven-by-seven-jagged", width: 7, height: 7, blocked: 9, interiorBlocked: 3, usable: 40, pieces: 10 },
-      { tier: 7, seed: "eight-by-seven-jagged", width: 8, height: 7, blocked: 12, interiorBlocked: 4, usable: 44, pieces: 11 },
-      { tier: 9, seed: "ten-by-eight-jagged", width: 10, height: 8, blocked: 16, interiorBlocked: 5, usable: 64, pieces: 16 },
+      { tier: 1, seed: "four-by-eight-jagged", width: 4, height: 8, blocked: 8, interiorBlocked: 3, usable: 24, pieces: 6 },
+      { tier: 2, seed: "five-by-seven-jagged", width: 5, height: 7, blocked: 11, interiorBlocked: 4, usable: 24, pieces: 6 },
+      { tier: 3, seed: "six-by-six-jagged", width: 6, height: 6, blocked: 8, interiorBlocked: 3, usable: 28, pieces: 7 },
+      { tier: 4, seed: "six-by-seven-jagged", width: 6, height: 7, blocked: 10, interiorBlocked: 4, usable: 32, pieces: 8 },
+      { tier: 5, seed: "seven-by-seven-jagged", width: 7, height: 7, blocked: 13, interiorBlocked: 5, usable: 36, pieces: 9 },
+      { tier: 6, seed: "seven-by-eight-jagged", width: 7, height: 8, blocked: 16, interiorBlocked: 6, usable: 40, pieces: 10 },
+      { tier: 7, seed: "seven-by-nine-jagged", width: 7, height: 9, blocked: 19, interiorBlocked: 8, usable: 44, pieces: 11 },
+      { tier: 8, seed: "eight-by-eight-jagged", width: 8, height: 8, blocked: 16, interiorBlocked: 6, usable: 48, pieces: 12 },
+      { tier: 9, seed: "nine-by-ten-jagged", width: 9, height: 10, blocked: 26, interiorBlocked: 10, usable: 64, pieces: 16 },
     ];
     for (const expected of planned) {
       const puzzle = generatePuzzle({ tier: expected.tier, seed: expected.seed });

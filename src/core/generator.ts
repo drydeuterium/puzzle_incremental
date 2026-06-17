@@ -82,11 +82,17 @@ function isBoundaryCell(config: TierConfig, index: number): boolean {
   return x === 0 || y === 0 || x === config.width - 1 || y === config.height - 1;
 }
 
+function interiorBlockedCountFor(config: TierConfig, blockedCount: number, interiorCellCount: number): number {
+  const requested = config.shape?.interiorBlockedCellCount
+    ?? Math.round(blockedCount * (config.shape?.interiorBlockedCellRatio ?? 0));
+  return Math.min(Math.max(0, requested), blockedCount, interiorCellCount);
+}
+
 function chooseJaggedBlockedCells(config: TierConfig, seed: string, blockedCount: number, attempt: number): readonly number[] | null {
   const allCellIndices = makeRange(config.width * config.height);
   const boundaryCells = allCellIndices.filter((index) => isBoundaryCell(config, index));
   const interiorCells = allCellIndices.filter((index) => !isBoundaryCell(config, index));
-  const interiorBlockedCount = Math.min(config.shape?.interiorBlockedCellCount ?? 0, blockedCount, interiorCells.length);
+  const interiorBlockedCount = interiorBlockedCountFor(config, blockedCount, interiorCells.length);
   const boundaryBlockedCount = blockedCount - interiorBlockedCount;
   if (boundaryBlockedCount > boundaryCells.length) {
     return null;
