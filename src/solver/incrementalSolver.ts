@@ -5,6 +5,7 @@ type Candidate = Readonly<{
   id: number;
   pieceIndex: number;
   pieceType: string;
+  pieceMask: bigint;
   mask: bigint;
   placement: Placement;
 }>;
@@ -39,6 +40,7 @@ export function createSolver(puzzle: PuzzleDefinition, options: SolverOptions, i
       id: pieceIndex * 10_000 + candidateOffset,
       pieceIndex,
       pieceType: piece.type,
+      pieceMask: 1n << BigInt(pieceIndex),
       mask: maskFromIndices(placement.cellIndices),
       placement,
     })),
@@ -61,7 +63,7 @@ export function createSolver(puzzle: PuzzleDefinition, options: SolverOptions, i
       if (pieceIndex >= 0) {
         occupiedMask |= maskFromIndices(placement.cellIndices);
         usedPieceMask |= 1n << BigInt(pieceIndex);
-        selected.push({ id: -selected.length - 1, pieceIndex, pieceType: placement.pieceType, mask: maskFromIndices(placement.cellIndices), placement });
+        selected.push({ id: -selected.length - 1, pieceIndex, pieceType: placement.pieceType, pieceMask: 1n << BigInt(pieceIndex), mask: maskFromIndices(placement.cellIndices), placement });
       }
     }
   }
@@ -132,15 +134,23 @@ export function createSolver(puzzle: PuzzleDefinition, options: SolverOptions, i
     if (!options.heuristics.candidateOrdering) {
       return legal;
     }
-    return [...legal].sort((a, b) => futureFreedomScore(b) - futureFreedomScore(a));
+    return legal
+      .map((candidate) => ({ candidate, score: futureFreedomScore(candidate) }))
+      .sort((a, b) => b.score - a.score)
+      .map((entry) => entry.candidate);
   };
 
   const futureFreedomScore = (candidate: Candidate): number => {
     const nextOccupied = occupiedMask | candidate.mask;
+    const nextUsedPieceMask = usedPieceMask | candidate.pieceMask;
     let score = 0;
     for (const index of puzzle.usableCellIndices) {
       if ((nextOccupied & (1n << BigInt(index))) === 0n) {
-        score += (candidatesByCell.get(index) ?? []).filter((inner) => inner.pieceIndex !== candidate.pieceIndex && (inner.mask & nextOccupied) === 0n).length;
+        for (const inner of candidatesByCell.get(index) ?? []) {
+          if ((inner.pieceMask & nextUsedPieceMask) === 0n && (inner.mask & nextOccupied) === 0n) {
+            score += 1;
+          }
+        }
       }
     }
     return score;
@@ -176,14 +186,14 @@ export function createSolver(puzzle: PuzzleDefinition, options: SolverOptions, i
 
   const applyCandidate = (candidate: Candidate): void => {
     occupiedMask |= candidate.mask;
-    usedPieceMask |= 1n << BigInt(candidate.pieceIndex);
+    usedPieceMask |= candidate.pieceMask;
     selected.push(candidate);
     maxDepth = Math.max(maxDepth, selected.length);
   };
 
   const undoCandidate = (candidate: Candidate): void => {
     occupiedMask &= ~candidate.mask;
-    usedPieceMask &= ~(1n << BigInt(candidate.pieceIndex));
+    usedPieceMask &= ~candidate.pieceMask;
     const removed = selected.pop();
     if (!removed || removed.id !== candidate.id) {
       throw new Error("Solver stack corruption");

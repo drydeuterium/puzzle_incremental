@@ -1518,6 +1518,11 @@ function SolverLaneSlot({
       return clearPendingTimer;
     }
 
+    if (currentRun && !isActiveSolverStatus(currentRun.status) && run) {
+      scheduleDisplayRun(run, 0);
+      return clearPendingTimer;
+    }
+
     const elapsedSinceSessionShown = displayedSinceRef.current === 0
       ? minSessionMs
       : Date.now() - displayedSinceRef.current;
@@ -1593,6 +1598,7 @@ export function App() {
   const [state, dispatch] = useReducer(reducer, undefined, createInitialState);
   const workerRef = useRef<SolverWorkerClient | null>(null);
   const solverSessionsRef = useRef<Map<SolverSessionId, PuzzleDefinition>>(new Map());
+  const nextSolverLaneRef = useRef(0);
   const computeRateSamplesRef = useRef<ComputeRateSample[]>([]);
   const computeRateSaveCreatedAtRef = useRef<string | null>(null);
   const [hoverCell, setHoverCell] = useState<number | null>(null);
@@ -1723,7 +1729,8 @@ export function App() {
   const autoSolverLockMessage = (state.save.progression.upgradeLevels["auto-solver"] ?? 0) <= 0
     ? copy.autoSolverLocked
     : copy.autoSolverManualLocked(state.solver.autoTier, manualClearsAutoTier, autoSolverRequiredManualClears);
-  const solverLaneCapacity = Math.max(0, solverParallelSessions - state.solver.activeSessions);
+  const activeSolverRunCount = state.solver.runs.filter((run) => isActiveSolverStatus(run.status)).length;
+  const solverLaneCapacity = Math.max(0, solverParallelSessions - activeSolverRunCount);
   const solverPayoutMultiplier = automatedRewardMultiplier(state.save.progression.upgradeLevels);
 
   const handleWorkerMessage = useCallback((message: WorkerResponse) => {
@@ -1777,14 +1784,24 @@ export function App() {
     const stamp = Date.now();
     const laneCount = parallelSessions(state.save.progression.upgradeLevels);
     const usedLaneIndices = new Set(state.solver.runs.filter((run) => isActiveSolverStatus(run.status)).map((run) => run.laneIndex));
-    const freeLaneIndices = Array.from({ length: laneCount }, (_, laneIndex) => laneIndex).filter((laneIndex) => !usedLaneIndices.has(laneIndex));
+    let nextLaneIndex = nextSolverLaneRef.current % Math.max(1, laneCount);
     const sessions = puzzles.map((automatedPuzzle, index): SolverRunSession => {
       const sessionId = `auto-${automatedPuzzle.tier}-${automatedPuzzle.seed}-${stamp}-${index}`;
-      const laneIndex = freeLaneIndices[index] ?? index % Math.max(1, laneCount);
+      let laneIndex = index % Math.max(1, laneCount);
+      for (let offset = 0; offset < laneCount; offset += 1) {
+        const candidateLane = (nextLaneIndex + offset) % laneCount;
+        if (!usedLaneIndices.has(candidateLane)) {
+          laneIndex = candidateLane;
+          break;
+        }
+      }
+      usedLaneIndices.add(laneIndex);
+      nextLaneIndex = (laneIndex + 1) % Math.max(1, laneCount);
       solverSessionsRef.current.set(sessionId, automatedPuzzle);
       worker.post({ type: "START", sessionId, puzzle: automatedPuzzle, options: solverOptionsFromUpgrades(state.save.progression.upgradeLevels, state.save.settings.visualization) });
       return { sessionId, puzzle: automatedPuzzle, laneIndex };
     });
+    nextSolverLaneRef.current = nextLaneIndex;
     dispatch({ type: "solver-runs-started", sessions });
   }, [ensureWorker, state.save.progression.upgradeLevels, state.save.settings.visualization, state.solver.runs]);
 
@@ -1801,11 +1818,11 @@ export function App() {
   }, [autoSolverReady, solverLaneCapacity, startSolverRuns, state.solver.autoNext, state.solver.autoTier]);
 
   useEffect(() => {
-    if (state.solver.autoNext || state.solver.activeSessions > 0 || state.solver.autoTier === state.save.progression.selectedTier) {
+    if (state.solver.autoNext || activeSolverRunCount > 0 || state.solver.autoTier === state.save.progression.selectedTier) {
       return;
     }
     dispatch({ type: "set-auto-tier", tier: state.save.progression.selectedTier });
-  }, [state.save.progression.selectedTier, state.solver.activeSessions, state.solver.autoNext, state.solver.autoTier]);
+  }, [activeSolverRunCount, state.save.progression.selectedTier, state.solver.autoNext, state.solver.autoTier]);
 
   const startSolver = () => {
     if (!autoSolverReady) {
@@ -1821,7 +1838,7 @@ export function App() {
   };
 
   const pauseOrResumeSolver = () => {
-    if (state.solver.activeSessions === 0 || !workerRef.current) {
+    if (activeSolverRunCount === 0 || !workerRef.current) {
       return;
     }
     if (state.solver.status === "paused") {
@@ -1838,7 +1855,7 @@ export function App() {
   };
 
   const cancelSolver = () => {
-    if (state.solver.activeSessions > 0 && workerRef.current) {
+    if (activeSolverRunCount > 0 && workerRef.current) {
       dispatch({ type: "set-auto-next", value: false });
       for (const run of state.solver.runs.filter((entry) => isActiveSolverStatus(entry.status))) {
         workerRef.current.post({ type: "CANCEL", sessionId: run.sessionId });
@@ -2205,7 +2222,7 @@ export function App() {
           <section className="panel solver-lane" aria-label={copy.solverLanes}>
             <div className="solver-lane-header">
               <h2>{copy.solverLanes}</h2>
-              <span>{state.solver.activeSessions}/{solverParallelSessions}</span>
+              <span>{activeSolverRunCount}/{solverParallelSessions}</span>
             </div>
             <div className="solver-run-list">
               {solverRunSlots.map((run, laneIndex) => {
@@ -2251,8 +2268,8 @@ export function App() {
             </div>
             <div className="controls solver-controls">
               <button type="button" onClick={startSolver} disabled={!autoSolverReady || solverLaneCapacity <= 0} title={autoSolverReady ? undefined : autoSolverLockMessage}>{copy.startSolver}</button>
-              <button type="button" onClick={pauseOrResumeSolver} disabled={state.solver.activeSessions === 0}>{state.solver.status === "paused" ? copy.resume : copy.pause}</button>
-              <button type="button" onClick={cancelSolver} disabled={state.solver.activeSessions === 0}>{copy.cancel}</button>
+              <button type="button" onClick={pauseOrResumeSolver} disabled={activeSolverRunCount === 0}>{state.solver.status === "paused" ? copy.resume : copy.pause}</button>
+              <button type="button" onClick={cancelSolver} disabled={activeSolverRunCount === 0}>{copy.cancel}</button>
               <button type="button" onClick={() => dispatch({ type: "set-auto-tier", tier: state.save.progression.selectedTier })} disabled={state.solver.autoTier === state.save.progression.selectedTier}>{copy.useCurrentTier}</button>
               <button
                 type="button"
