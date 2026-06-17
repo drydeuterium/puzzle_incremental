@@ -70,6 +70,7 @@ export function createSolver(puzzle: PuzzleDefinition, options: SolverOptions, i
   let nodes = 0;
   let backtracks = 0;
   let maxDepth = selected.length;
+  let latestVisiblePreview: readonly Placement[] = selected.map((candidate) => candidate.placement);
   const startedAt = now();
   const deadKeys: string[] = [];
   const deadSet = new Set<string>();
@@ -85,6 +86,14 @@ export function createSolver(puzzle: PuzzleDefinition, options: SolverOptions, i
   });
 
   const stateKey = (): string => `${occupiedMask.toString(16)}:${usedPieceMask.toString(16)}`;
+
+  const preview = (): readonly Placement[] => {
+    const current = selected.map((candidate) => candidate.placement);
+    if (current.length > 0 || latestVisiblePreview.length === 0) {
+      latestVisiblePreview = current;
+    }
+    return latestVisiblePreview;
+  };
 
   const markDead = (key: string): void => {
     const limit = options.heuristics.deadStateCacheEntries;
@@ -186,7 +195,7 @@ export function createSolver(puzzle: PuzzleDefinition, options: SolverOptions, i
   return {
     step: (nodeBudget: number): StepResult => {
       if (status === "paused" || status === "cancelled") {
-        return { status: "running", consumedNodes: 0, stats: stats(), preview: selected.map((candidate) => candidate.placement) };
+        return { status: "running", consumedNodes: 0, stats: stats(), preview: preview() };
       }
       status = "running";
       let consumedNodes = 0;
@@ -219,7 +228,7 @@ export function createSolver(puzzle: PuzzleDefinition, options: SolverOptions, i
         consumedNodes += 1;
         frames.push(chooseFrame(candidate));
       }
-      return { status: "running", consumedNodes, stats: stats(), preview: selected.map((candidate) => candidate.placement) };
+      return { status: "running", consumedNodes, stats: stats(), preview: preview() };
     },
     pause: () => {
       if (status === "running") {

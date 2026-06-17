@@ -714,6 +714,13 @@ function trimSolverRuns(runs: readonly SolverRun[]): readonly SolverRun[] {
   return [...completed, ...active];
 }
 
+function mergeRunningPreview(current: readonly Placement[], incoming: readonly Placement[] | undefined, status: SolverStats["status"]): readonly Placement[] {
+  if (!incoming) {
+    return current;
+  }
+  return isActiveSolverStatus(status) && incoming.length === 0 ? current : incoming;
+}
+
 function createInitialState(): AppState {
   const loaded = loadSave();
   const save = loaded.save;
@@ -972,7 +979,7 @@ function reducer(state: AppState, action: Action): AppState {
       if (state.solver.sessionId !== action.sessionId) {
         return state;
       }
-      return { ...state, solver: { ...state.solver, status: action.stats.status, stats: action.stats, preview: action.preview ?? state.solver.preview } };
+      return { ...state, solver: { ...state.solver, status: action.stats.status, stats: action.stats, preview: mergeRunningPreview(state.solver.preview, action.preview, action.stats.status) } };
     case "solver-solved": {
       if (state.solver.completedSessionIds.includes(action.sessionId) || state.solver.sessionId !== action.sessionId) {
         return state;
@@ -1060,7 +1067,7 @@ function reducer(state: AppState, action: Action): AppState {
           status: action.stats.status === "paused" ? "paused" : state.solver.status,
           stats: action.stats,
           runs: state.solver.runs.map((run) => run.sessionId === action.sessionId
-            ? { ...run, status: action.stats.status, stats: action.stats, preview: action.preview ?? run.preview }
+            ? { ...run, status: action.stats.status, stats: action.stats, preview: mergeRunningPreview(run.preview, action.preview, action.stats.status) }
             : run),
         },
       };
