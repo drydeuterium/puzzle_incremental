@@ -4,9 +4,11 @@ import { dirname, resolve } from "node:path";
 
 const root = resolve(import.meta.dirname, "..");
 const configPath = resolve(root, "src/game/config.ts");
+const prestigePath = resolve(root, "src/game/prestige.ts");
 const outputPath = resolve(root, process.argv[2] ?? "codex/cheat-save.json");
 
 const configText = await readFile(configPath, "utf8");
+const prestigeText = await readFile(prestigePath, "utf8");
 
 const gameConfigVersion = /gameConfigVersion:\s*"([^"]+)"/.exec(configText)?.[1];
 const generatorVersion = Number(/generatorVersion:\s*(\d+)/.exec(configText)?.[1]);
@@ -15,8 +17,18 @@ const upgradeLevels = Object.fromEntries(
   [...configText.matchAll(/\{\s*id:\s*"([^"]+)"[^}]*maxLevel:\s*(\d+)/g)]
     .map((match) => [match[1], Number(match[2])]),
 );
+const prestigeUpgradeLevels = Object.fromEntries(
+  [...prestigeText.matchAll(/\{\s*id:\s*"([^"]+)"[^}]*maxLevel:\s*(\d+)/g)]
+    .map((match) => [match[1], Number(match[2])]),
+);
 
-if (!gameConfigVersion || !Number.isSafeInteger(generatorVersion) || tierIds.length === 0 || Object.keys(upgradeLevels).length === 0) {
+if (
+  !gameConfigVersion
+  || !Number.isSafeInteger(generatorVersion)
+  || tierIds.length === 0
+  || Object.keys(upgradeLevels).length === 0
+  || Object.keys(prestigeUpgradeLevels).length === 0
+) {
   throw new Error("Could not parse game config for cheat save generation.");
 }
 
@@ -37,6 +49,19 @@ const save = {
     upgradeLevels,
     selectedTier: Math.max(...tierIds),
     autoSeedCounters: {},
+  },
+  prestige: {
+    insight: 1000,
+    lifetimeInsight: 1000,
+    count: 10,
+    pendingInsight: 1,
+    upgradeLevels: prestigeUpgradeLevels,
+  },
+  run: {
+    startedAt: now,
+    manualClearsByTier,
+    clearsByTier: Object.fromEntries(tierIds.map((tier) => [String(tier), 25])),
+    highestTier: Math.max(...tierIds),
   },
   currentPuzzle: null,
   statistics: {

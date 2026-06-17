@@ -122,6 +122,28 @@ export type UpgradeId =
 
 export type UpgradeState = Readonly<Record<UpgradeId, number>>;
 
+export type PrestigeUpgradeId =
+  | "reward-analysis"
+  | "solver-foundation"
+  | "tier-compression";
+
+export type PrestigeUpgradeState = Readonly<Record<PrestigeUpgradeId, number>>;
+
+export type PrestigeState = Readonly<{
+  insight: number;
+  lifetimeInsight: number;
+  count: number;
+  pendingInsight: number;
+  upgradeLevels: PrestigeUpgradeState;
+}>;
+
+export type RunState = Readonly<{
+  startedAt: string;
+  manualClearsByTier: Readonly<Record<string, number>>;
+  clearsByTier: Readonly<Record<string, number>>;
+  highestTier: number;
+}>;
+
 export type UserSettings = Readonly<{
   visualization: "on" | "reduced" | "off";
   animationSpeed: number;
@@ -181,6 +203,8 @@ export type SaveDataV1 = Readonly<{
     selectedTier: number;
     autoSeedCounters: Readonly<Record<string, number>>;
   }>;
+  prestige: PrestigeState;
+  run: RunState;
   currentPuzzle: SavedPuzzle | null;
   statistics: Statistics;
   settings: UserSettings;

@@ -1,9 +1,10 @@
 import { GAME_CONFIG } from "./config";
-import type { SolverOptions, Statistics, UpgradeId, UpgradeState } from "../core/types";
+import { solverFoundationBonus, tierCompressionDiscount } from "./prestige";
+import type { PrestigeUpgradeState, SolverOptions, UpgradeId, UpgradeState } from "../core/types";
 
 export type PurchaseOutcome = Readonly<
   | { ok: true; price: number }
-  | { ok: false; reason: "maximum-level" | "missing-prerequisite" | "not-enough-compute"; price: number; prerequisite?: UpgradeId }
+  | { ok: false; reason: "maximum-level" | "missing-prerequisite" | "missing-manual-clear" | "not-enough-compute"; price: number; prerequisite?: UpgradeId; requiredTier?: number }
 >;
 
 export function initialUpgradeState(): UpgradeState {
@@ -18,21 +19,47 @@ export function getUpgradeConfig(id: UpgradeId) {
   return upgrade;
 }
 
-export function getUpgradePrice(id: UpgradeId, level: number): number {
-  const upgrade = getUpgradeConfig(id);
-  return Math.floor(upgrade.basePrice * upgrade.priceMultiplier ** level);
+function isTierUpgradeId(id: UpgradeId): boolean {
+  return /^tier-\d+$/.test(id);
 }
 
-export function canPurchaseUpgrade(levels: UpgradeState, compute: number, id: UpgradeId): PurchaseOutcome {
+function requiredManualClearTier(id: UpgradeId): number | null {
+  const match = /^tier-(\d+)$/.exec(id);
+  if (!match) {
+    return null;
+  }
+  return Number(match[1]) - 1;
+}
+
+export function getUpgradePrice(id: UpgradeId, level: number, prestigeLevels?: PrestigeUpgradeState): number {
+  const upgrade = getUpgradeConfig(id);
+  const basePrice = Math.floor(upgrade.basePrice * upgrade.priceMultiplier ** level);
+  if (!prestigeLevels || !isTierUpgradeId(id)) {
+    return basePrice;
+  }
+  return Math.max(1, Math.floor(basePrice * (1 - tierCompressionDiscount(prestigeLevels))));
+}
+
+export function canPurchaseUpgrade(
+  levels: UpgradeState,
+  compute: number,
+  id: UpgradeId,
+  manualClearsByTier: Readonly<Record<string, number>> = {},
+  prestigeLevels?: PrestigeUpgradeState,
+): PurchaseOutcome {
   const upgrade = getUpgradeConfig(id);
   const level = levels[id] ?? 0;
-  const price = getUpgradePrice(id, level);
+  const price = getUpgradePrice(id, level, prestigeLevels);
   if (level >= upgrade.maxLevel) {
     return { ok: false, reason: "maximum-level", price };
   }
   const missing = upgrade.prerequisites.find((prerequisite) => (levels[prerequisite] ?? 0) <= 0);
   if (missing) {
     return { ok: false, reason: "missing-prerequisite", prerequisite: missing, price };
+  }
+  const manualTier = requiredManualClearTier(id);
+  if (manualTier !== null && (manualClearsByTier[String(manualTier)] ?? 0) <= 0) {
+    return { ok: false, reason: "missing-manual-clear", requiredTier: manualTier, price };
   }
   if (compute < price) {
     return { ok: false, reason: "not-enough-compute", price };
@@ -48,9 +75,10 @@ export function isTierUnlocked(levels: UpgradeState, tier: number): boolean {
   return config.unlockUpgradeId === null || (levels[config.unlockUpgradeId] ?? 0) > 0;
 }
 
-export function nodesPerSecond(levels: UpgradeState): number {
+export function nodesPerSecond(levels: UpgradeState, prestigeLevels?: PrestigeUpgradeState): number {
   const level = levels["solver-throughput"] ?? 0;
-  return Math.round(GAME_CONFIG.solver.baseNodesPerSecond * GAME_CONFIG.solver.throughputMultiplierPerLevel ** level);
+  const baseNodesPerSecond = GAME_CONFIG.solver.baseNodesPerSecond + (prestigeLevels ? solverFoundationBonus(prestigeLevels) : 0);
+  return Math.round(baseNodesPerSecond * GAME_CONFIG.solver.throughputMultiplierPerLevel ** level);
 }
 
 export function automatedRewardMultiplier(levels: UpgradeState): number {
@@ -61,23 +89,23 @@ export function automatedRewardMultiplier(levels: UpgradeState): number {
   );
 }
 
-export function manualClearsForTier(statistics: Statistics, tier: number): number {
-  return statistics.manualClearsByTier[String(tier)] ?? 0;
+export function manualClearsForTier(manualClearsByTier: Readonly<Record<string, number>>, tier: number): number {
+  return manualClearsByTier[String(tier)] ?? 0;
 }
 
-export function isAutoSolverReady(levels: UpgradeState, statistics: Statistics, tier: number): boolean {
+export function isAutoSolverReady(levels: UpgradeState, manualClearsByTier: Readonly<Record<string, number>>, tier: number): boolean {
   return (levels["auto-solver"] ?? 0) > 0
-    && manualClearsForTier(statistics, tier) >= GAME_CONFIG.solver.manualClearsRequiredByTierForAutoSolver;
+    && manualClearsForTier(manualClearsByTier, tier) >= GAME_CONFIG.solver.manualClearsRequiredByTierForAutoSolver;
 }
 
 const HIGH_TIER_SOLVER_MIN_TIER = 7;
 
-export function solverOptionsFromUpgrades(levels: UpgradeState, visualization: SolverOptions["visualization"], tier = 0): SolverOptions {
+export function solverOptionsFromUpgrades(levels: UpgradeState, visualization: SolverOptions["visualization"], tier = 0, prestigeLevels?: PrestigeUpgradeState): SolverOptions {
   const cacheLevel = levels["dead-state-cache"] ?? 0;
   const partialCacheLevel = levels["partial-board-cache"] ?? 0;
   const highTierHeuristicsEnabled = tier >= HIGH_TIER_SOLVER_MIN_TIER;
   return {
-    nodesPerSecond: nodesPerSecond(levels),
+    nodesPerSecond: nodesPerSecond(levels, prestigeLevels),
     visualization,
     heuristics: {
       constraintOrdering: (levels["constraint-ordering"] ?? 0) > 0,

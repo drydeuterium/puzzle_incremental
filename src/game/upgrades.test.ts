@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { createInitialStatistics } from "../persistence/schema";
-import { automatedRewardMultiplier, canPurchaseUpgrade, initialUpgradeState, isAutoSolverReady, isTierUnlocked, nodesPerSecond, solverOptionsFromUpgrades } from "./upgrades";
+import { initialPrestigeUpgradeState } from "./prestige";
+import { automatedRewardMultiplier, canPurchaseUpgrade, getUpgradePrice, initialUpgradeState, isAutoSolverReady, isTierUnlocked, nodesPerSecond, solverOptionsFromUpgrades } from "./upgrades";
 
 describe("upgrades", () => {
   it("blocks missing funds and prerequisites", () => {
@@ -40,6 +40,7 @@ describe("upgrades", () => {
   });
 
   it("unlocks tiers through the linear chain", () => {
+    const manualClearsByTier = { 0: 1, 1: 1, 2: 1, 3: 1, 4: 1, 5: 1, 6: 1, 7: 1, 8: 1 };
     const levels = {
       ...initialUpgradeState(),
       "tier-1": 1,
@@ -48,22 +49,36 @@ describe("upgrades", () => {
       "tier-3": 1,
     };
     expect(initialUpgradeState()["tier-9"]).toBe(0);
-    expect(canPurchaseUpgrade(levels, 9500, "tier-4").ok).toBe(true);
+    expect(canPurchaseUpgrade(levels, 9500, "tier-4", manualClearsByTier).ok).toBe(true);
     expect(isTierUnlocked({ ...levels, "tier-4": 1 }, 4)).toBe(true);
-    expect(canPurchaseUpgrade({ ...levels, "tier-4": 1 }, 19_000, "tier-5").ok).toBe(true);
-    expect(canPurchaseUpgrade({ ...levels, "tier-4": 1, "tier-5": 1 }, 42_000, "tier-6").ok).toBe(true);
-    expect(canPurchaseUpgrade({ ...levels, "tier-4": 1, "tier-5": 1, "tier-6": 1, "tier-7": 1, "tier-8": 1 }, 420_000, "tier-9").ok).toBe(true);
+    expect(canPurchaseUpgrade({ ...levels, "tier-4": 1 }, 19_000, "tier-5", manualClearsByTier).ok).toBe(true);
+    expect(canPurchaseUpgrade({ ...levels, "tier-4": 1, "tier-5": 1 }, 42_000, "tier-6", manualClearsByTier).ok).toBe(true);
+    expect(canPurchaseUpgrade({ ...levels, "tier-4": 1, "tier-5": 1, "tier-6": 1, "tier-7": 1, "tier-8": 1 }, 420_000, "tier-9", manualClearsByTier).ok).toBe(true);
+  });
+
+  it("requires a manual clear on the previous tier before buying the next tier", () => {
+    const levels = initialUpgradeState();
+    expect(canPurchaseUpgrade(levels, 350, "tier-1")).toMatchObject({ ok: false, reason: "missing-manual-clear", requiredTier: 0 });
+    expect(canPurchaseUpgrade(levels, 350, "tier-1", { 0: 1 }).ok).toBe(true);
   });
 
   it("uses slower base solver speed and requires manual clears per tier", () => {
     const levels = { ...initialUpgradeState(), "auto-solver": 1 };
-    const statistics = {
-      ...createInitialStatistics("2026-01-01T00:00:00.000Z"),
-      manualClearsByTier: { 0: 4 },
-    };
     expect(nodesPerSecond(levels)).toBe(2);
-    expect(isAutoSolverReady(levels, statistics, 0)).toBe(false);
-    expect(isAutoSolverReady(levels, { ...statistics, manualClearsByTier: { 0: 5 } }, 0)).toBe(true);
+    expect(isAutoSolverReady(levels, { 0: 4 }, 0)).toBe(false);
+    expect(isAutoSolverReady(levels, { 0: 5 }, 0)).toBe(true);
+  });
+
+  it("applies prestige solver foundation before throughput multipliers", () => {
+    const levels = { ...initialUpgradeState(), "solver-throughput": 1 };
+    const prestigeLevels = { ...initialPrestigeUpgradeState(), "solver-foundation": 3 };
+    expect(nodesPerSecond(levels, prestigeLevels)).toBe(Math.round(5 * 1.55));
+  });
+
+  it("applies tier compression only to tier unlock prices", () => {
+    const prestigeLevels = { ...initialPrestigeUpgradeState(), "tier-compression": 2 };
+    expect(getUpgradePrice("tier-1", 0, prestigeLevels)).toBe(315);
+    expect(getUpgradePrice("placement-scanner", 0, prestigeLevels)).toBe(120);
   });
 
   it("starts automated rewards at 0.1x and improves them with solver payout", () => {

@@ -4,7 +4,7 @@ import { indexToCell } from "../core/coordinates";
 import { generatePuzzle, dailySeed } from "../core/generator";
 import { calculateReward } from "../core/rewards";
 import { enumerateOrientations, TETROMINO_TYPES } from "../core/tetrominoes";
-import type { BoardState, ClearClassification, PieceInstance, Placement, PlacementValidation, PuzzleDefinition, SaveDataV1, SolverSessionId, SolverStats, UpgradeId } from "../core/types";
+import type { BoardState, ClearClassification, PieceInstance, Placement, PlacementValidation, PrestigeUpgradeId, PuzzleDefinition, SaveDataV1, SolverSessionId, SolverStats, UpgradeId } from "../core/types";
 import { GAME_CONFIG } from "../game/config";
 import {
   SOLVER_LANE_MIN_SESSION_MS_MAX,
@@ -16,8 +16,9 @@ import {
   normalizeSolverLaneMinSessionMs,
   normalizeSolverLanePreviewUpdateMs,
 } from "../game/settings";
-import { automatedRewardMultiplier, canPurchaseUpgrade, getUpgradePrice, isAutoSolverReady, isTierUnlocked, manualClearsForTier, nodesPerSecond, parallelSessions, solverOptionsFromUpgrades, type PurchaseOutcome } from "../game/upgrades";
-import { createInitialSave } from "../persistence/schema";
+import { canPurchasePrestigeUpgrade, getPrestigeUpgradePrice, prestigeRewardMultiplier, PRESTIGE_UPGRADES, type PrestigePurchaseOutcome } from "../game/prestige";
+import { automatedRewardMultiplier, canPurchaseUpgrade, getUpgradePrice, initialUpgradeState, isAutoSolverReady, isTierUnlocked, manualClearsForTier, nodesPerSecond, parallelSessions, solverOptionsFromUpgrades, type PurchaseOutcome } from "../game/upgrades";
+import { createInitialRunState, createInitialSave } from "../persistence/schema";
 import { eraseSave, exportSave, importSave, loadSave, saveGame } from "../persistence/saveRepository";
 import { solveToEnd } from "../solver/incrementalSolver";
 import type { WorkerResponse } from "../solver/solverProtocol";
@@ -56,7 +57,8 @@ type UpgradeSortOrder = "price-asc" | "config";
 type PendingConfirmation =
   | Readonly<{ type: "reset-board" }>
   | Readonly<{ type: "new-puzzle"; daily: boolean }>
-  | Readonly<{ type: "switch-tier"; tier: number; timestamp: number }>;
+  | Readonly<{ type: "switch-tier"; tier: number; timestamp: number }>
+  | Readonly<{ type: "prestige" }>;
 
 const SOLVER_LANE_SLOT_COUNT = 4;
 const SOLVER_LANE_SESSION_STAGGER_MS = 140;
@@ -84,9 +86,10 @@ type AppState = Readonly<{
   toast: string | null;
   inspectionMessage: string | null;
   persistentWarning: string | null;
-  clearResult: Readonly<{ reward: number; classification: ClearClassification }> | null;
+  clearResult: Readonly<{ reward: number; classification: ClearClassification; tier: number; insightEarned: boolean }> | null;
   settingsOpen: boolean;
   statsOpen: boolean;
+  prestigeOpen: boolean;
   tutorialOpen: boolean;
   solver: SolverUiState;
 }>;
@@ -141,6 +144,9 @@ type Action =
   | Readonly<{ type: "dismiss-clear-result" }>
   | Readonly<{ type: "set-settings-open"; value: boolean }>
   | Readonly<{ type: "set-stats-open"; value: boolean }>
+  | Readonly<{ type: "set-prestige-open"; value: boolean }>
+  | Readonly<{ type: "purchase-prestige"; upgradeId: PrestigeUpgradeId }>
+  | Readonly<{ type: "prestige"; puzzle: PuzzleDefinition; nowIso: string }>
   | Readonly<{ type: "set-visualization"; value: SaveDataV1["settings"]["visualization"] }>
   | Readonly<{ type: "set-high-contrast"; value: boolean }>
   | Readonly<{ type: "set-theme"; value: SaveDataV1["settings"]["theme"] }>
@@ -278,6 +284,30 @@ const UPGRADE_DESCRIPTIONS_JA: Record<UpgradeId, string> = {
   "tier-9": "Tier 9 のパズルを解放します。",
 };
 
+const PRESTIGE_UPGRADE_NAMES_EN: Record<PrestigeUpgradeId, string> = {
+  "reward-analysis": "Reward Analysis",
+  "solver-foundation": "Solver Foundation",
+  "tier-compression": "Tier Compression",
+};
+
+const PRESTIGE_UPGRADE_NAMES_JA: Record<PrestigeUpgradeId, string> = {
+  "reward-analysis": "報酬解析",
+  "solver-foundation": "ソルバー基盤",
+  "tier-compression": "Tier圧縮",
+};
+
+const PRESTIGE_UPGRADE_DESCRIPTIONS_EN: Record<PrestigeUpgradeId, string> = {
+  "reward-analysis": "Permanent +10% Compute reward per level.",
+  "solver-foundation": "Permanent +1 base solver node/s per level before throughput multipliers.",
+  "tier-compression": "Permanent -5% Tier upgrade cost per level, up to -25%.",
+};
+
+const PRESTIGE_UPGRADE_DESCRIPTIONS_JA: Record<PrestigeUpgradeId, string> = {
+  "reward-analysis": "恒久的にCompute報酬をLvごとに+10%します。",
+  "solver-foundation": "恒久的にソルバー基礎nodes/sをLvごとに+1します。処理速度倍率の前に加算されます。",
+  "tier-compression": "恒久的にTier解放価格をLvごとに-5%します。最大-25%。",
+};
+
 const COPY = {
   en: {
     compute: "Compute",
@@ -374,6 +404,8 @@ const COPY = {
     clearCounts: (manual: number, assisted: number, automated: number) => `Manual ${manual}, Assisted ${assisted}, Automated ${automated}`,
     upgradeNames: UPGRADE_NAMES_EN,
     upgradeDescriptions: UPGRADE_DESCRIPTIONS_EN,
+    prestigeUpgradeNames: PRESTIGE_UPGRADE_NAMES_EN,
+    prestigeUpgradeDescriptions: PRESTIGE_UPGRADE_DESCRIPTIONS_EN,
     dismissMessage: "Dismiss message",
     resizeLeftPanel: "Resize left panel",
     resizeRightPanel: "Resize right panel",
@@ -381,7 +413,23 @@ const COPY = {
     resizeRightPanels: "Resize solver status and upgrades",
     maximumLevel: "maximum level",
     notEnoughCompute: "not enough Compute",
+    notEnoughInsight: "not enough Insight",
+    manualClearRequired: (tier: number) => `requires a manual Tier ${tier} clear this prestige`,
     requiresUpgrade: (name: string) => `requires ${name}`,
+    insight: "Insight",
+    prestige: "Prestige",
+    lifetimeInsight: "Lifetime Insight",
+    prestigeCount: "Prestige count",
+    pendingInsight: "Pending Insight",
+    prestigeCondition: "Manual clear Tier 9 to gain Insight +1.",
+    prestigeResetBody: "Reset Compute, normal upgrades, tier unlocks, current puzzle, and this run's manual clears. Insight and permanent upgrades remain.",
+    prestigeConfirmAction: "Prestige reset",
+    prestigeNoPending: "No pending Insight yet.",
+    prestigePending: (amount: number) => `Insight +${amount} is pending.`,
+    prestigeManualOnly: "Insight is earned only from manual Tier 9 clears.",
+    prestigeEarned: (amount: number) => `Insight +${amount} is pending.`,
+    permanentUpgrades: "Permanent upgrades",
+    purchasedPrestigeUpgrade: (name: string) => `Purchased ${name}`,
     purchasedUpgrade: (name: string) => `Purchased ${name}`,
     lockedUpgrade: (name: string) => `${name} is locked.`,
     tutorialTitle: "Quick start",
@@ -535,6 +583,8 @@ const COPY = {
     clearCounts: (manual: number, assisted: number, automated: number) => `手動 ${manual}、補助 ${assisted}、自動 ${automated}`,
     upgradeNames: UPGRADE_NAMES_JA,
     upgradeDescriptions: UPGRADE_DESCRIPTIONS_JA,
+    prestigeUpgradeNames: PRESTIGE_UPGRADE_NAMES_JA,
+    prestigeUpgradeDescriptions: PRESTIGE_UPGRADE_DESCRIPTIONS_JA,
     dismissMessage: "メッセージを閉じる",
     resizeLeftPanel: "左パネルの幅を変更",
     resizeRightPanel: "右パネルの幅を変更",
@@ -542,7 +592,23 @@ const COPY = {
     resizeRightPanels: "ソルバー状態とアップグレードの高さを変更",
     maximumLevel: "最大レベル",
     notEnoughCompute: "Compute不足",
+    notEnoughInsight: "Insight不足",
+    manualClearRequired: (tier: number) => `Tier ${tier} の手動クリアが必要`,
     requiresUpgrade: (name: string) => `${name}が必要`,
+    insight: "Insight",
+    prestige: "Prestige",
+    lifetimeInsight: "累計Insight",
+    prestigeCount: "Prestige回数",
+    pendingInsight: "保留中Insight",
+    prestigeCondition: "Tier 9を手動クリアすると Insight +1。",
+    prestigeResetBody: "Compute、通常アップグレード、Tier解放、現在盤面、この周回の手動クリア状況をリセットします。Insightと恒久アップグレードは残ります。",
+    prestigeConfirmAction: "Prestige実行",
+    prestigeNoPending: "保留中Insightはありません。",
+    prestigePending: (amount: number) => `Insight +${amount} が保留中です。`,
+    prestigeManualOnly: "InsightはTier 9の手動クリアで獲得できます。",
+    prestigeEarned: (amount: number) => `Insight +${amount} が保留されました。`,
+    permanentUpgrades: "恒久アップグレード",
+    purchasedPrestigeUpgrade: (name: string) => `${name}を購入しました`,
     purchasedUpgrade: (name: string) => `${name}を購入しました`,
     lockedUpgrade: (name: string) => `${name}は未解放です。`,
     tutorialTitle: "はじめ方",
@@ -742,6 +808,10 @@ function upgradeName(copy: AppCopy, id: UpgradeId): string {
   return copy.upgradeNames[id];
 }
 
+function prestigeUpgradeName(copy: AppCopy, id: PrestigeUpgradeId): string {
+  return copy.prestigeUpgradeNames[id];
+}
+
 function upgradeTabFor(id: UpgradeId): UpgradeTabId {
   return UPGRADE_TAB_BY_ID[id];
 }
@@ -760,13 +830,23 @@ function compareUpgradeOrder(a: (typeof GAME_CONFIG.upgrades)[number], b: (typeo
   return (UPGRADE_ORDER_INDEX.get(a.id) ?? 0) - (UPGRADE_ORDER_INDEX.get(b.id) ?? 0);
 }
 
-function compareUpgradePrice(levels: SaveDataV1["progression"]["upgradeLevels"], a: (typeof GAME_CONFIG.upgrades)[number], b: (typeof GAME_CONFIG.upgrades)[number]): number {
-  const priceDiff = getUpgradePrice(a.id, levels[a.id] ?? 0) - getUpgradePrice(b.id, levels[b.id] ?? 0);
+function compareUpgradePrice(
+  levels: SaveDataV1["progression"]["upgradeLevels"],
+  prestigeLevels: SaveDataV1["prestige"]["upgradeLevels"],
+  a: (typeof GAME_CONFIG.upgrades)[number],
+  b: (typeof GAME_CONFIG.upgrades)[number],
+): number {
+  const priceDiff = getUpgradePrice(a.id, levels[a.id] ?? 0, prestigeLevels) - getUpgradePrice(b.id, levels[b.id] ?? 0, prestigeLevels);
   return priceDiff !== 0 ? priceDiff : compareUpgradeOrder(a, b);
 }
 
-function sortUpgrades(levels: SaveDataV1["progression"]["upgradeLevels"], upgrades: readonly (typeof GAME_CONFIG.upgrades)[number][], order: UpgradeSortOrder): (typeof GAME_CONFIG.upgrades)[number][] {
-  return [...upgrades].sort((a, b) => order === "price-asc" ? compareUpgradePrice(levels, a, b) : compareUpgradeOrder(a, b));
+function sortUpgrades(
+  levels: SaveDataV1["progression"]["upgradeLevels"],
+  prestigeLevels: SaveDataV1["prestige"]["upgradeLevels"],
+  upgrades: readonly (typeof GAME_CONFIG.upgrades)[number][],
+  order: UpgradeSortOrder,
+): (typeof GAME_CONFIG.upgrades)[number][] {
+  return [...upgrades].sort((a, b) => order === "price-asc" ? compareUpgradePrice(levels, prestigeLevels, a, b) : compareUpgradeOrder(a, b));
 }
 
 function purchaseReason(copy: AppCopy, outcome: PurchaseOutcome): string {
@@ -779,7 +859,17 @@ function purchaseReason(copy: AppCopy, outcome: PurchaseOutcome): string {
   if (outcome.reason === "not-enough-compute") {
     return copy.notEnoughCompute;
   }
+  if (outcome.reason === "missing-manual-clear") {
+    return copy.manualClearRequired(outcome.requiredTier ?? 0);
+  }
   return copy.requiresUpgrade(upgradeName(copy, outcome.prerequisite ?? "auto-solver"));
+}
+
+function prestigePurchaseReason(copy: AppCopy, outcome: PrestigePurchaseOutcome): string {
+  if (outcome.ok) {
+    return "";
+  }
+  return outcome.reason === "maximum-level" ? copy.maximumLevel : copy.notEnoughInsight;
 }
 
 function classificationLabel(copy: AppCopy, classification: ClearClassification): string {
@@ -881,6 +971,7 @@ function createInitialState(): AppState {
     clearResult: null,
     settingsOpen: false,
     statsOpen: false,
+    prestigeOpen: false,
     tutorialOpen: !save.settings.tutorialCompleted,
     solver: createIdleSolverState(save.progression.selectedTier),
   };
@@ -908,17 +999,30 @@ function awardClear(state: AppState, board: BoardState, stats?: SolverStats): Ap
     state.puzzle.definition,
     classification,
     classification === "automated" ? automatedRewardMultiplier(state.save.progression.upgradeLevels) : undefined,
+    prestigeRewardMultiplier(state.save.prestige.upgradeLevels),
   );
+  const tierKey = String(state.puzzle.definition.tier);
   const clearsByTier = {
     ...state.save.statistics.clearsByTier,
-    [state.puzzle.definition.tier]: (state.save.statistics.clearsByTier[String(state.puzzle.definition.tier)] ?? 0) + 1,
+    [state.puzzle.definition.tier]: (state.save.statistics.clearsByTier[tierKey] ?? 0) + 1,
   };
   const manualClearsByTier = classification === "manual"
     ? {
         ...state.save.statistics.manualClearsByTier,
-        [state.puzzle.definition.tier]: (state.save.statistics.manualClearsByTier[String(state.puzzle.definition.tier)] ?? 0) + 1,
+        [state.puzzle.definition.tier]: (state.save.statistics.manualClearsByTier[tierKey] ?? 0) + 1,
       }
     : state.save.statistics.manualClearsByTier;
+  const runClearsByTier = {
+    ...state.save.run.clearsByTier,
+    [state.puzzle.definition.tier]: (state.save.run.clearsByTier[tierKey] ?? 0) + 1,
+  };
+  const runManualClearsByTier = classification === "manual"
+    ? {
+        ...state.save.run.manualClearsByTier,
+        [state.puzzle.definition.tier]: (state.save.run.manualClearsByTier[tierKey] ?? 0) + 1,
+      }
+    : state.save.run.manualClearsByTier;
+  const insightEarned = classification === "manual" && state.puzzle.definition.tier === GAME_CONFIG.prestige.requiredTier;
   const elapsed = Date.now() - state.puzzle.startedAt;
   const fastestManualClearMilliseconds = classification === "manual"
     ? Math.min(state.save.statistics.fastestManualClearMilliseconds ?? elapsed, elapsed)
@@ -928,6 +1032,18 @@ function awardClear(state: AppState, board: BoardState, stats?: SolverStats): Ap
     economy: {
       compute: Math.min(GAME_CONFIG.currency.maxSafeAmount, state.save.economy.compute + reward),
       lifetimeCompute: Math.min(GAME_CONFIG.currency.maxSafeAmount, state.save.economy.lifetimeCompute + reward),
+    },
+    prestige: {
+      ...state.save.prestige,
+      pendingInsight: insightEarned
+        ? Math.max(state.save.prestige.pendingInsight, GAME_CONFIG.prestige.manualClearInsight)
+        : state.save.prestige.pendingInsight,
+    },
+    run: {
+      ...state.save.run,
+      clearsByTier: runClearsByTier,
+      manualClearsByTier: runManualClearsByTier,
+      highestTier: Math.max(state.save.run.highestTier, state.puzzle.definition.tier),
     },
     statistics: {
       ...state.save.statistics,
@@ -948,7 +1064,7 @@ function awardClear(state: AppState, board: BoardState, stats?: SolverStats): Ap
     ...state,
     save: nextSave,
     puzzle: { ...state.puzzle, board, cleared: true },
-    clearResult: { reward, classification },
+    clearResult: { reward, classification, tier: state.puzzle.definition.tier, insightEarned },
     toast: null,
   };
 }
@@ -1064,7 +1180,7 @@ function reducer(state: AppState, action: Action): AppState {
     case "purchase": {
       const copy = copyForSave(state.save);
       const levels = state.save.progression.upgradeLevels;
-      const outcome = canPurchaseUpgrade(levels, state.save.economy.compute, action.upgradeId);
+      const outcome = canPurchaseUpgrade(levels, state.save.economy.compute, action.upgradeId, state.save.run.manualClearsByTier, state.save.prestige.upgradeLevels);
       if (!outcome.ok) {
         return { ...state, toast: purchaseReason(copy, outcome) };
       }
@@ -1079,6 +1195,64 @@ function reducer(state: AppState, action: Action): AppState {
           },
         },
         toast: copy.purchasedUpgrade(upgradeName(copy, action.upgradeId)),
+      };
+    }
+    case "purchase-prestige": {
+      const copy = copyForSave(state.save);
+      const outcome = canPurchasePrestigeUpgrade(state.save.prestige, action.upgradeId);
+      if (!outcome.ok) {
+        return { ...state, toast: prestigePurchaseReason(copy, outcome) };
+      }
+      return {
+        ...state,
+        save: {
+          ...state.save,
+          prestige: {
+            ...state.save.prestige,
+            insight: state.save.prestige.insight - outcome.price,
+            upgradeLevels: {
+              ...state.save.prestige.upgradeLevels,
+              [action.upgradeId]: (state.save.prestige.upgradeLevels[action.upgradeId] ?? 0) + 1,
+            },
+          },
+        },
+        toast: copy.purchasedPrestigeUpgrade(prestigeUpgradeName(copy, action.upgradeId)),
+      };
+    }
+    case "prestige": {
+      const gainedInsight = state.save.prestige.pendingInsight;
+      return {
+        ...state,
+        save: {
+          ...state.save,
+          economy: {
+            compute: 0,
+            lifetimeCompute: state.save.economy.lifetimeCompute,
+          },
+          progression: {
+            upgradeLevels: initialUpgradeState(),
+            selectedTier: 0,
+            autoSeedCounters: {},
+          },
+          prestige: {
+            ...state.save.prestige,
+            insight: state.save.prestige.insight + gainedInsight,
+            lifetimeInsight: state.save.prestige.lifetimeInsight + gainedInsight,
+            count: state.save.prestige.count + 1,
+            pendingInsight: 0,
+          },
+          run: createInitialRunState(action.nowIso),
+        },
+        puzzle: { definition: action.puzzle, board: createEmptyBoard(), classification: "manual", startedAt: Date.now(), cleared: false },
+        selectedPieceId: null,
+        rotations: {},
+        undoStack: [],
+        redoStack: [],
+        scannerEnabled: false,
+        clearResult: null,
+        inspectionMessage: null,
+        prestigeOpen: false,
+        solver: createIdleSolverState(0),
       };
     }
     case "scanner":
@@ -1109,6 +1283,8 @@ function reducer(state: AppState, action: Action): AppState {
       return { ...state, settingsOpen: action.value };
     case "set-stats-open":
       return { ...state, statsOpen: action.value };
+    case "set-prestige-open":
+      return { ...state, prestigeOpen: action.value };
     case "set-visualization":
       return { ...state, save: { ...state.save, settings: { ...state.save.settings, visualization: action.value } } };
     case "set-high-contrast":
@@ -1232,8 +1408,14 @@ function reducer(state: AppState, action: Action): AppState {
       if (state.solver.completedSessionIds.includes(action.sessionId)) {
         return state;
       }
-      const reward = calculateReward(action.puzzle, "automated", automatedRewardMultiplier(state.save.progression.upgradeLevels));
+      const reward = calculateReward(
+        action.puzzle,
+        "automated",
+        automatedRewardMultiplier(state.save.progression.upgradeLevels),
+        prestigeRewardMultiplier(state.save.prestige.upgradeLevels),
+      );
       const remainingActiveSessions = Math.max(0, state.solver.activeSessions - 1);
+      const tierKey = String(action.puzzle.tier);
       return {
         ...state,
         save: {
@@ -1248,12 +1430,20 @@ function reducer(state: AppState, action: Action): AppState {
             automatedClears: state.save.statistics.automatedClears + 1,
             clearsByTier: {
               ...state.save.statistics.clearsByTier,
-              [action.puzzle.tier]: (state.save.statistics.clearsByTier[String(action.puzzle.tier)] ?? 0) + 1,
+              [action.puzzle.tier]: (state.save.statistics.clearsByTier[tierKey] ?? 0) + 1,
             },
             lifetimeSolverNodes: state.save.statistics.lifetimeSolverNodes + action.stats.nodes,
             lifetimeBacktracks: state.save.statistics.lifetimeBacktracks + action.stats.backtracks,
             automatedCellsSolved: state.save.statistics.automatedCellsSolved + action.puzzle.usableCellIndices.length,
             maximumDifficultyScore: Math.max(state.save.statistics.maximumDifficultyScore, action.puzzle.difficulty.score),
+          },
+          run: {
+            ...state.save.run,
+            clearsByTier: {
+              ...state.save.run.clearsByTier,
+              [action.puzzle.tier]: (state.save.run.clearsByTier[tierKey] ?? 0) + 1,
+            },
+            highestTier: Math.max(state.save.run.highestTier, action.puzzle.tier),
           },
         },
         solver: {
@@ -1735,6 +1925,7 @@ export function App() {
   const visibleUpgrades = selectedUpgradeTab
     ? sortUpgrades(
       upgradeLevels,
+      state.save.prestige.upgradeLevels,
       GAME_CONFIG.upgrades.filter((upgrade) => {
         const level = upgradeLevels[upgrade.id] ?? 0;
         return upgradeTabFor(upgrade.id) === selectedUpgradeTab
@@ -1743,9 +1934,9 @@ export function App() {
       upgradeSortOrder,
     )
     : [];
-  const manualClearsAutoTier = manualClearsForTier(state.save.statistics, state.solver.autoTier);
+  const manualClearsAutoTier = manualClearsForTier(state.save.run.manualClearsByTier, state.solver.autoTier);
   const autoSolverRequiredManualClears = GAME_CONFIG.solver.manualClearsRequiredByTierForAutoSolver;
-  const autoSolverReady = isAutoSolverReady(state.save.progression.upgradeLevels, state.save.statistics, state.solver.autoTier);
+  const autoSolverReady = isAutoSolverReady(state.save.progression.upgradeLevels, state.save.run.manualClearsByTier, state.solver.autoTier);
   const autoSolverLockMessage = (state.save.progression.upgradeLevels["auto-solver"] ?? 0) <= 0
     ? copy.autoSolverLocked
     : copy.autoSolverManualLocked(state.solver.autoTier, manualClearsAutoTier, autoSolverRequiredManualClears);
@@ -1818,12 +2009,12 @@ export function App() {
       usedLaneIndices.add(laneIndex);
       nextLaneIndex = (laneIndex + 1) % Math.max(1, laneCount);
       solverSessionsRef.current.set(sessionId, automatedPuzzle);
-      worker.post({ type: "START", sessionId, puzzle: automatedPuzzle, options: solverOptionsFromUpgrades(state.save.progression.upgradeLevels, state.save.settings.visualization, automatedPuzzle.tier) });
+      worker.post({ type: "START", sessionId, puzzle: automatedPuzzle, options: solverOptionsFromUpgrades(state.save.progression.upgradeLevels, state.save.settings.visualization, automatedPuzzle.tier, state.save.prestige.upgradeLevels) });
       return { sessionId, puzzle: automatedPuzzle, laneIndex };
     });
     nextSolverLaneRef.current = nextLaneIndex;
     dispatch({ type: "solver-runs-started", sessions });
-  }, [ensureWorker, state.save.progression.upgradeLevels, state.save.settings.visualization, state.solver.runs]);
+  }, [ensureWorker, state.save.prestige.upgradeLevels, state.save.progression.upgradeLevels, state.save.settings.visualization, state.solver.runs]);
 
   useEffect(() => {
     if (!state.solver.autoNext || !autoSolverReady || solverLaneCapacity <= 0) {
@@ -1909,6 +2100,22 @@ export function App() {
     dispatch({ type: "new-puzzle", puzzle: generatePuzzle({ tier, seed: `tier-${tier}-${timestamp}` }) });
   };
 
+  const executePrestige = () => {
+    if (state.save.prestige.pendingInsight <= 0) {
+      return;
+    }
+    workerRef.current?.dispose();
+    workerRef.current = null;
+    solverSessionsRef.current.clear();
+    nextSolverLaneRef.current = 0;
+    const now = new Date();
+    dispatch({
+      type: "prestige",
+      puzzle: generatePuzzle({ tier: 0, seed: `prestige-${state.save.prestige.count + 1}-${now.getTime()}` }),
+      nowIso: now.toISOString(),
+    });
+  };
+
   const switchTier = (tier: number, timestamp: number) => {
     if (!isTierUnlocked(state.save.progression.upgradeLevels, tier)) {
       return;
@@ -1933,8 +2140,10 @@ export function App() {
       dispatch({ type: "reset-board" });
     } else if (action.type === "new-puzzle") {
       createNewPuzzle(action.daily);
-    } else {
+    } else if (action.type === "switch-tier") {
       applyTierSwitch(action.tier, action.timestamp);
+    } else {
+      executePrestige();
     }
   };
 
@@ -1943,7 +2152,7 @@ export function App() {
       dispatch({ type: "toast", message: copy.lockedUpgrade(upgradeName(copy, "contradiction-detector")) });
       return;
     }
-    const result = solveToEnd(puzzle, solverOptionsFromUpgrades(state.save.progression.upgradeLevels, "off", puzzle.tier), state.puzzle.board, 100_000);
+    const result = solveToEnd(puzzle, solverOptionsFromUpgrades(state.save.progression.upgradeLevels, "off", puzzle.tier, state.save.prestige.upgradeLevels), state.puzzle.board, 100_000);
     dispatch({ type: "contradiction", message: result.status === "unsat" ? copy.contradictionFound : copy.contradictionClear });
   };
 
@@ -2091,6 +2300,10 @@ export function App() {
           <div className="metric"><span>{copy.compute}</span><strong data-testid="compute">{formatNumber(state.save.economy.compute, language)} C</strong></div>
           <div className="metric"><span>{copy.computePerSecond}</span><strong data-testid="compute-per-second">{formatRate(computePerSecond, language)}</strong></div>
           <div className="metric"><span>{copy.nodesPerSecond}</span><strong>{formatNumber(state.solver.stats?.measuredNodesPerSecond ?? 0, language)}</strong></div>
+          <div className="metric"><span>{copy.insight}</span><strong data-testid="insight">{formatNumber(state.save.prestige.insight, language)}</strong></div>
+          <button type="button" onClick={() => dispatch({ type: "set-prestige-open", value: true })}>
+            {state.save.prestige.pendingInsight > 0 ? `${copy.prestige} +${state.save.prestige.pendingInsight}` : copy.prestige}
+          </button>
           <button type="button" onClick={() => dispatch({ type: "set-tutorial-open", value: true })}>{copy.tutorial}</button>
           <button type="button" onClick={() => dispatch({ type: "set-settings-open", value: true })}>{copy.settings}</button>
           <button type="button" onClick={() => dispatch({ type: "set-stats-open", value: true })}>{copy.stats}</button>
@@ -2279,7 +2492,7 @@ export function App() {
               <span>{copy.status}</span><strong data-testid="solver-status">{solverStatusLabel(copy, state.solver.status)}</strong>
               <span>{copy.nodes}</span><strong>{formatNumber(state.solver.stats?.nodes ?? 0, language)}</strong>
               <span>{copy.backtracks}</span><strong>{formatNumber(state.solver.stats?.backtracks ?? 0, language)}</strong>
-              <span>{copy.theoryNodesPerSecond}</span><strong>{formatNumber(nodesPerSecond(state.save.progression.upgradeLevels), language)}</strong>
+              <span>{copy.theoryNodesPerSecond}</span><strong>{formatNumber(nodesPerSecond(state.save.progression.upgradeLevels, state.save.prestige.upgradeLevels), language)}</strong>
               <span>{copy.depth}</span><strong>{state.solver.stats?.currentDepth ?? 0}</strong>
               <span>{copy.autoTier}</span><strong>{copy.tier} {state.solver.autoTier}</strong>
               <span>{copy.parallel}</span><strong>{solverParallelSessions}</strong>
@@ -2357,8 +2570,14 @@ export function App() {
               {visibleUpgrades.length === 0 && <p className="empty-state">{copy.noVisibleUpgrades}</p>}
               {visibleUpgrades.map((upgrade) => {
                 const level = state.save.progression.upgradeLevels[upgrade.id] ?? 0;
-                const outcome = canPurchaseUpgrade(state.save.progression.upgradeLevels, state.save.economy.compute, upgrade.id);
-                const price = getUpgradePrice(upgrade.id, level);
+                const outcome = canPurchaseUpgrade(
+                  state.save.progression.upgradeLevels,
+                  state.save.economy.compute,
+                  upgrade.id,
+                  state.save.run.manualClearsByTier,
+                  state.save.prestige.upgradeLevels,
+                );
+                const price = getUpgradePrice(upgrade.id, level, state.save.prestige.upgradeLevels);
                 return (
                   <article className={`upgrade ${level >= upgrade.maxLevel ? "owned" : ""}`} key={upgrade.id}>
                     <div className="upgrade-header">
@@ -2379,12 +2598,58 @@ export function App() {
       {pendingConfirmation && (
         <div className="modal" role="dialog" aria-modal="true">
           <div className="modal-body">
-            <h2>{pendingConfirmation.type === "reset-board" ? copy.resetBoard : copy.discardCurrentPuzzle}</h2>
-            <p>{pendingConfirmation.type === "reset-board" ? copy.resetConfirmBody : copy.discardConfirmBody}</p>
+            <h2>{pendingConfirmation.type === "reset-board" ? copy.resetBoard : pendingConfirmation.type === "prestige" ? copy.prestige : copy.discardCurrentPuzzle}</h2>
+            <p>{pendingConfirmation.type === "reset-board" ? copy.resetConfirmBody : pendingConfirmation.type === "prestige" ? copy.prestigeResetBody : copy.discardConfirmBody}</p>
             <button type="button" onClick={confirmPendingAction}>
-              {pendingConfirmation.type === "reset-board" ? copy.resetBoard : copy.discardConfirmAction}
+              {pendingConfirmation.type === "reset-board" ? copy.resetBoard : pendingConfirmation.type === "prestige" ? copy.prestigeConfirmAction : copy.discardConfirmAction}
             </button>
             <button type="button" onClick={() => setPendingConfirmation(null)}>{copy.cancel}</button>
+          </div>
+        </div>
+      )}
+
+      {state.prestigeOpen && (
+        <div className="modal" role="dialog" aria-modal="true">
+          <div className="modal-body prestige-body">
+            <h2>{copy.prestige}</h2>
+            <div className="prestige-summary">
+              <div className="metric"><span>{copy.insight}</span><strong>{formatNumber(state.save.prestige.insight, language)}</strong></div>
+              <div className="metric"><span>{copy.lifetimeInsight}</span><strong>{formatNumber(state.save.prestige.lifetimeInsight, language)}</strong></div>
+              <div className="metric"><span>{copy.prestigeCount}</span><strong>{formatNumber(state.save.prestige.count, language)}</strong></div>
+              <div className="metric"><span>{copy.pendingInsight}</span><strong>{formatNumber(state.save.prestige.pendingInsight, language)}</strong></div>
+            </div>
+            <p>{copy.prestigeCondition}</p>
+            <p>{state.save.prestige.pendingInsight > 0 ? copy.prestigePending(state.save.prestige.pendingInsight) : copy.prestigeNoPending}</p>
+            <button
+              type="button"
+              disabled={state.save.prestige.pendingInsight <= 0}
+              onClick={() => {
+                dispatch({ type: "set-prestige-open", value: false });
+                setPendingConfirmation({ type: "prestige" });
+              }}
+            >
+              {copy.prestigeConfirmAction}
+            </button>
+            <h3>{copy.permanentUpgrades}</h3>
+            <div className="prestige-upgrade-list">
+              {PRESTIGE_UPGRADES.map((upgrade) => {
+                const level = state.save.prestige.upgradeLevels[upgrade.id] ?? 0;
+                const outcome = canPurchasePrestigeUpgrade(state.save.prestige, upgrade.id);
+                const price = getPrestigeUpgradePrice(upgrade.id, level);
+                return (
+                  <article className={`upgrade ${level >= upgrade.maxLevel ? "owned" : ""}`} key={upgrade.id}>
+                    <div className="upgrade-header">
+                      <strong>{prestigeUpgradeName(copy, upgrade.id)}</strong>
+                      <span>{copy.level} {level}/{upgrade.maxLevel}</span>
+                    </div>
+                    <p className="upgrade-description">{copy.prestigeUpgradeDescriptions[upgrade.id]}</p>
+                    <p>{outcome.ok ? `${copy.next}: ${outcome.price} ${copy.insight}` : `${price} ${copy.insight}, ${prestigePurchaseReason(copy, outcome)}`}</p>
+                    <button type="button" onClick={() => dispatch({ type: "purchase-prestige", upgradeId: upgrade.id })} disabled={!outcome.ok}>{copy.buy}</button>
+                  </article>
+                );
+              })}
+            </div>
+            <button type="button" onClick={() => dispatch({ type: "set-prestige-open", value: false })}>{copy.close}</button>
           </div>
         </div>
       )}
@@ -2395,6 +2660,20 @@ export function App() {
             <h2>{copy.clear}</h2>
             <p>{copy.clearSummary(classificationLabel(copy, state.clearResult.classification), state.clearResult.reward)}</p>
             <p>{copy.difficulty} {puzzle.difficulty.score}</p>
+            {state.clearResult.tier === GAME_CONFIG.prestige.requiredTier && (
+              <p>{state.clearResult.insightEarned ? copy.prestigeEarned(GAME_CONFIG.prestige.manualClearInsight) : copy.prestigeManualOnly}</p>
+            )}
+            {state.clearResult.insightEarned && (
+              <button
+                type="button"
+                onClick={() => {
+                  dispatch({ type: "dismiss-clear-result" });
+                  dispatch({ type: "set-prestige-open", value: true });
+                }}
+              >
+                {copy.prestige}
+              </button>
+            )}
             <button type="button" onClick={() => startNewPuzzle(false)}>{copy.nextPuzzle}</button>
             <button type="button" onClick={() => dispatch({ type: "dismiss-clear-result" })}>{copy.close}</button>
           </div>

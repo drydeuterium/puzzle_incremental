@@ -54,7 +54,7 @@ function makeTier(input: TierInput): TierConfig {
 }
 
 export const GAME_CONFIG = {
-  gameConfigVersion: "1.6.0-high-tier-pruning",
+  gameConfigVersion: "1.7.0-prestige-v1",
   generatorVersion: 6,
   currency: {
     name: "Compute",
@@ -75,6 +75,7 @@ export const GAME_CONFIG = {
     tierRewardMaxMultiplier: 42,
     automatedPayoutMultiplierPerLevel: 1.26,
     automatedPayoutMaxMultiplier: 1,
+    prestigeRewardMultiplierPerLevel: 0.1,
   },
   generator: {
     attemptLimit: 50,
@@ -94,6 +95,13 @@ export const GAME_CONFIG = {
     autosaveIntervalMilliseconds: 5000,
     placementSaveDebounceMilliseconds: 500,
     undoHistoryLimit: 100,
+  },
+  prestige: {
+    requiredTier: 9,
+    manualClearInsight: 1,
+    tierPriceDiscountPerLevel: 0.05,
+    tierPriceMaxDiscount: 0.25,
+    solverFoundationNodesPerSecondPerLevel: 1,
   },
   tiers: [
     makeTier({ id: 0, width: 4, height: 4, pieceCount: 4, difficultyScoreMin: 1, difficultyScoreMax: 180, unlockUpgradeId: null }),

@@ -5,8 +5,9 @@ import {
   normalizeSolverLaneMinSessionMs,
   normalizeSolverLanePreviewUpdateMs,
 } from "../game/settings";
+import { createInitialPrestigeState, initialPrestigeUpgradeState } from "../game/prestige";
 import { initialUpgradeState } from "../game/upgrades";
-import type { SaveDataV1, Statistics, UpgradeState, UserSettings } from "../core/types";
+import type { PrestigeState, PrestigeUpgradeState, RunState, SaveDataV1, Statistics, UpgradeState, UserSettings } from "../core/types";
 
 export const SAVE_KEY = "puzzle_incremental.save.v1";
 export const BACKUP_SAVE_KEY = "puzzle_incremental.save.backup";
@@ -46,6 +47,15 @@ export function createInitialStatistics(nowIso: string): Statistics {
   };
 }
 
+export function createInitialRunState(nowIso: string): RunState {
+  return {
+    startedAt: nowIso,
+    manualClearsByTier: {},
+    clearsByTier: {},
+    highestTier: 0,
+  };
+}
+
 export function createInitialSave(now = new Date()): SaveDataV1 {
   const iso = now.toISOString();
   return {
@@ -63,6 +73,8 @@ export function createInitialSave(now = new Date()): SaveDataV1 {
       selectedTier: 0,
       autoSeedCounters: {},
     },
+    prestige: createInitialPrestigeState(),
+    run: createInitialRunState(iso),
     currentPuzzle: null,
     statistics: createInitialStatistics(iso),
     settings: defaultSettings(),
@@ -106,6 +118,52 @@ function normalizeUpgradeState(value: Record<string, unknown>): UpgradeState {
   ) as UpgradeState;
 }
 
+function normalizePrestigeUpgradeState(value: Record<string, unknown>): PrestigeUpgradeState {
+  const defaults = initialPrestigeUpgradeState();
+  return Object.fromEntries(
+    Object.entries(defaults).map(([upgradeId, defaultLevel]) => [
+      upgradeId,
+      isSafeNonNegativeInteger(value[upgradeId]) ? value[upgradeId] : defaultLevel,
+    ]),
+  ) as PrestigeUpgradeState;
+}
+
+function normalizePrestigeState(value: unknown): PrestigeState {
+  const defaults = createInitialPrestigeState();
+  if (!isRecord(value)) {
+    return defaults;
+  }
+  return {
+    insight: isSafeNonNegativeInteger(value.insight) ? value.insight : defaults.insight,
+    lifetimeInsight: isSafeNonNegativeInteger(value.lifetimeInsight) ? value.lifetimeInsight : defaults.lifetimeInsight,
+    count: isSafeNonNegativeInteger(value.count) ? value.count : defaults.count,
+    pendingInsight: isSafeNonNegativeInteger(value.pendingInsight) ? value.pendingInsight : defaults.pendingInsight,
+    upgradeLevels: isRecord(value.upgradeLevels) ? normalizePrestigeUpgradeState(value.upgradeLevels) : defaults.upgradeLevels,
+  };
+}
+
+function normalizeRunState(value: unknown, fallbackStartedAt: string, legacyManualClearsByTier: Readonly<Record<string, number>>): RunState {
+  const defaults = createInitialRunState(fallbackStartedAt);
+  if (!isRecord(value)) {
+    const highestLegacyTier = Object.keys(legacyManualClearsByTier).reduce((highest, tier) => {
+      const parsed = Number(tier);
+      return Number.isSafeInteger(parsed) ? Math.max(highest, parsed) : highest;
+    }, 0);
+    return {
+      ...defaults,
+      manualClearsByTier: legacyManualClearsByTier,
+      clearsByTier: {},
+      highestTier: highestLegacyTier,
+    };
+  }
+  return {
+    startedAt: typeof value.startedAt === "string" ? value.startedAt : defaults.startedAt,
+    manualClearsByTier: isRecord(value.manualClearsByTier) ? normalizeCountRecord(value.manualClearsByTier) : legacyManualClearsByTier,
+    clearsByTier: isRecord(value.clearsByTier) ? normalizeCountRecord(value.clearsByTier) : defaults.clearsByTier,
+    highestTier: isSafeNonNegativeInteger(value.highestTier) ? value.highestTier : defaults.highestTier,
+  };
+}
+
 export function validateSaveData(value: unknown): SaveDataV1 | null {
   if (!isRecord(value) || value.schemaVersion !== 1) {
     return null;
@@ -128,15 +186,19 @@ export function validateSaveData(value: unknown): SaveDataV1 | null {
   }
   const defaults = defaultSettings();
   const defaultStatistics = createInitialStatistics(typeof value.createdAt === "string" ? value.createdAt : new Date().toISOString());
+  const normalizedManualClearsByTier = isRecord(statistics.manualClearsByTier) ? normalizeCountRecord(statistics.manualClearsByTier) : defaultStatistics.manualClearsByTier;
+  const fallbackStartedAt = typeof value.createdAt === "string" ? value.createdAt : new Date().toISOString();
   const normalized: SaveDataV1 = {
     ...(value as SaveDataV1),
     progression: {
       ...(value as SaveDataV1).progression,
       upgradeLevels: normalizeUpgradeState(progression.upgradeLevels),
     },
+    prestige: normalizePrestigeState(value.prestige),
+    run: normalizeRunState(value.run, fallbackStartedAt, normalizedManualClearsByTier),
     statistics: {
       ...(value as SaveDataV1).statistics,
-      manualClearsByTier: isRecord(statistics.manualClearsByTier) ? normalizeCountRecord(statistics.manualClearsByTier) : defaultStatistics.manualClearsByTier,
+      manualClearsByTier: normalizedManualClearsByTier,
     },
     settings: {
       visualization: isVisualization(settings.visualization) ? settings.visualization : defaults.visualization,

@@ -21,7 +21,7 @@ test("fresh start manual clear", async ({ page }) => {
       generatorVersion: 6,
       createdAt: now,
       updatedAt: now,
-      economy: { compute: 0, lifetimeCompute: 0 },
+      economy: { compute: 1000, lifetimeCompute: 1000 },
       progression: {
         upgradeLevels: {
           "placement-scanner": 0,
@@ -98,6 +98,11 @@ test("fresh start manual clear", async ({ page }) => {
     localStorage.setItem("puzzle_incremental.save.backup", JSON.stringify(save));
   });
   await page.reload();
+  await page.getByRole("tab", { name: "Tier" }).click();
+  const tierOneCard = page.getByRole("tabpanel", { name: "Tier" }).locator(".upgrade").filter({ hasText: "Tier 1" }).first();
+  await expect(tierOneCard).toContainText("requires a manual Tier 0 clear this prestige");
+  await expect(tierOneCard.getByRole("button", { name: "Buy" })).toBeDisabled();
+
   const anchors = [0, 2, 8, 10];
   for (let index = 0; index < anchors.length; index += 1) {
     await page.getByTestId(`piece-p${index}`).click();
@@ -105,6 +110,9 @@ test("fresh start manual clear", async ({ page }) => {
   }
   await expect(page.getByRole("dialog").getByText(/manual clear/i)).toBeVisible();
   await expect(page.getByTestId("compute")).not.toHaveText("0 C");
+  await page.getByRole("button", { name: "Close" }).click();
+  await expect(tierOneCard).not.toContainText("requires a manual Tier 0 clear this prestige");
+  await expect(tierOneCard.getByRole("button", { name: "Buy" })).toBeEnabled();
 });
 
 test("settings and persistence shell work", async ({ page }) => {

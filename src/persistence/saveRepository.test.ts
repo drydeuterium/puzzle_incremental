@@ -36,6 +36,10 @@ describe("save repository", () => {
         ...save.progression,
         upgradeLevels: legacyUpgradeLevels,
       },
+      statistics: {
+        ...save.statistics,
+        manualClearsByTier: { 0: 2, 1: 1 },
+      },
       settings: {
         visualization: save.settings.visualization,
         animationSpeed: save.settings.animationSpeed,
@@ -43,6 +47,8 @@ describe("save repository", () => {
         theme: save.settings.theme,
       },
     };
+    delete (legacySave as Record<string, unknown>).prestige;
+    delete (legacySave as Record<string, unknown>).run;
     storage.setItem("puzzle_incremental.save.v1", JSON.stringify(legacySave));
     const loaded = loadSave(storage);
     expect(loaded.save.settings.language).toBe("ja");
@@ -51,7 +57,14 @@ describe("save repository", () => {
     expect(loaded.save.settings.hidePurchasedUpgrades).toBe(true);
     expect(loaded.save.settings.solverLaneMinSessionMs).toBe(1000);
     expect(loaded.save.settings.solverLanePreviewUpdateMs).toBe(250);
-    expect(loaded.save.statistics.manualClearsByTier).toEqual({});
+    expect(loaded.save.statistics.manualClearsByTier).toEqual({ 0: 2, 1: 1 });
+    expect(loaded.save.run.manualClearsByTier).toEqual({ 0: 2, 1: 1 });
+    expect(loaded.save.run.clearsByTier).toEqual({});
+    expect(loaded.save.run.highestTier).toBe(1);
+    expect(loaded.save.prestige.insight).toBe(0);
+    expect(loaded.save.prestige.pendingInsight).toBe(0);
+    expect(loaded.save.prestige.upgradeLevels["reward-analysis"]).toBe(0);
+    expect(loaded.save.prestige.upgradeLevels["tier-compression"]).toBe(0);
     expect(loaded.save.progression.upgradeLevels["tier-6"]).toBe(0);
     expect(loaded.save.progression.upgradeLevels["tier-9"]).toBe(0);
   });

@@ -102,6 +102,147 @@ function seedClearPuzzle(): void {
   window.localStorage.setItem(BACKUP_SAVE_KEY, JSON.stringify(save));
 }
 
+function seedTierGatePuzzle(): void {
+  const now = new Date("2026-01-01T00:00:00.000Z");
+  const base = createInitialSave(now);
+  const placements = [
+    { pieceId: "p0", pieceType: "O", orientationIndex: 0, anchor: { x: 0, y: 0 }, cellIndices: [0, 1, 4, 5] },
+    { pieceId: "p1", pieceType: "O", orientationIndex: 0, anchor: { x: 2, y: 0 }, cellIndices: [2, 3, 6, 7] },
+    { pieceId: "p2", pieceType: "O", orientationIndex: 0, anchor: { x: 0, y: 2 }, cellIndices: [8, 9, 12, 13] },
+    { pieceId: "p3", pieceType: "O", orientationIndex: 0, anchor: { x: 2, y: 2 }, cellIndices: [10, 11, 14, 15] },
+  ];
+  const save = {
+    ...base,
+    economy: { ...base.economy, compute: 1000 },
+    settings: { ...base.settings, language: "en", tutorialCompleted: true },
+    currentPuzzle: {
+      definition: {
+        id: "tier-gate-fixture",
+        generatorVersion: GAME_CONFIG.generatorVersion,
+        tier: 0,
+        seed: "tier-gate-fixture",
+        width: 4,
+        height: 4,
+        usableCellIndices: Array.from({ length: 16 }, (_, index) => index),
+        blockedCellIndices: [],
+        pieces: placements.map((placement) => ({ id: placement.pieceId, type: "O" })),
+        difficulty: { score: 1, solutionNodes: 1, backtracks: 0, maxDepth: 4, forcedRatio: 1, initialBranching: 4, capped: false },
+        constructionSolution: placements,
+      },
+      placements: [],
+      classification: "manual",
+      startedAt: now.toISOString(),
+      elapsedMilliseconds: 0,
+      cleared: false,
+    },
+  };
+  window.localStorage.setItem(SAVE_KEY, JSON.stringify(save));
+  window.localStorage.setItem(BACKUP_SAVE_KEY, JSON.stringify(save));
+}
+
+function seedTierNineClearPuzzle(assisted = false): void {
+  const now = new Date("2026-01-01T00:00:00.000Z");
+  const base = createInitialSave(now);
+  const save = {
+    ...base,
+    settings: { ...base.settings, language: "en", tutorialCompleted: true },
+    progression: {
+      ...base.progression,
+      selectedTier: 9,
+      upgradeLevels: {
+        ...base.progression.upgradeLevels,
+        ...(assisted
+          ? {
+              "placement-scanner": 1,
+              "contradiction-detector": 1,
+              "forced-move": 1,
+            }
+          : {}),
+        "tier-1": 1,
+        "tier-2": 1,
+        "tier-3": 1,
+        "tier-4": 1,
+        "tier-5": 1,
+        "tier-6": 1,
+        "tier-7": 1,
+        "tier-8": 1,
+        "tier-9": 1,
+      },
+    },
+    currentPuzzle: {
+      definition: {
+        id: "tier-nine-clear-fixture",
+        generatorVersion: GAME_CONFIG.generatorVersion,
+        tier: 9,
+        seed: "tier-nine-clear-fixture",
+        width: 2,
+        height: 2,
+        usableCellIndices: [0, 1, 2, 3],
+        blockedCellIndices: [],
+        pieces: [{ id: "p0", type: "O" }],
+        difficulty: { score: 1200, solutionNodes: 1, backtracks: 0, maxDepth: 1, forcedRatio: 1, initialBranching: 1, capped: false },
+        constructionSolution: [{ pieceId: "p0", pieceType: "O", orientationIndex: 0, anchor: { x: 0, y: 0 }, cellIndices: [0, 1, 2, 3] }],
+      },
+      placements: [],
+      classification: "manual",
+      startedAt: now.toISOString(),
+      elapsedMilliseconds: 0,
+      cleared: false,
+    },
+  };
+  window.localStorage.setItem(SAVE_KEY, JSON.stringify(save));
+  window.localStorage.setItem(BACKUP_SAVE_KEY, JSON.stringify(save));
+}
+
+function seedPrestigeReadySave(): void {
+  const now = new Date("2026-01-01T00:00:00.000Z");
+  const base = createInitialSave(now);
+  const save = {
+    ...base,
+    economy: { compute: 1234, lifetimeCompute: 9876 },
+    settings: { ...base.settings, language: "en", tutorialCompleted: true },
+    progression: {
+      ...base.progression,
+      selectedTier: 9,
+      autoSeedCounters: { 9: 3 },
+      upgradeLevels: {
+        ...base.progression.upgradeLevels,
+        "placement-scanner": 1,
+        "tier-1": 1,
+        "tier-2": 1,
+        "tier-3": 1,
+        "tier-4": 1,
+        "tier-5": 1,
+        "tier-6": 1,
+        "tier-7": 1,
+        "tier-8": 1,
+        "tier-9": 1,
+      },
+    },
+    prestige: {
+      ...base.prestige,
+      insight: 2,
+      lifetimeInsight: 4,
+      count: 1,
+      pendingInsight: 1,
+      upgradeLevels: {
+        ...base.prestige.upgradeLevels,
+        "reward-analysis": 1,
+        "solver-foundation": 1,
+        "tier-compression": 1,
+      },
+    },
+    run: {
+      ...base.run,
+      manualClearsByTier: { 0: 1, 8: 1, 9: 1 },
+      clearsByTier: { 0: 1, 9: 1 },
+      highestTier: 9,
+    },
+  };
+  window.localStorage.setItem(SAVE_KEY, JSON.stringify(save));
+  window.localStorage.setItem(BACKUP_SAVE_KEY, JSON.stringify(save));
+}
+
 function seedUnsortedPiecePuzzle(): void {
   const now = new Date("2026-01-01T00:00:00.000Z");
   const base = createInitialSave(now);
@@ -228,6 +369,10 @@ function seedAutoSolverProgress(manualClears: number, parallelSolverLevel = 0): 
     },
     statistics: {
       ...base.statistics,
+      manualClearsByTier: { 0: manualClears },
+    },
+    run: {
+      ...base.run,
       manualClearsByTier: { 0: manualClears },
     },
   };
@@ -536,6 +681,90 @@ describe("App", () => {
     expect(screen.queryByText("Placement Scanner")).not.toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Hide purchased: On" }));
     expect(screen.getByText("Placement Scanner")).toBeInTheDocument();
+  });
+
+  it("requires the previous tier's manual clear before buying a tier unlock", async () => {
+    seedTierGatePuzzle();
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.click(screen.getByRole("tab", { name: "Tier" }));
+    const tierPanel = screen.getByRole("tabpanel", { name: "Tier" });
+    const tierOneCard = within(tierPanel).getByText("Tier 1").closest("article") as HTMLElement;
+    expect(tierOneCard).toHaveTextContent("requires a manual Tier 0 clear this prestige");
+    expect(within(tierOneCard).getByRole("button", { name: "Buy" })).toBeDisabled();
+
+    for (const [pieceId, anchor] of [["p0", 0], ["p1", 2], ["p2", 8], ["p3", 10]] as const) {
+      await user.click(screen.getByTestId(`piece-${pieceId}`));
+      await user.click(screen.getByTestId(`cell-${anchor}`));
+    }
+    await user.click(screen.getByRole("button", { name: "Close" }));
+
+    expect(within(tierOneCard).getByRole("button", { name: "Buy" })).toBeEnabled();
+  });
+
+  it("shows prestige state and permanent upgrades in a separate modal", async () => {
+    seedTwoPiecePuzzle();
+    const user = userEvent.setup();
+    render(<App />);
+
+    expect(screen.getByTestId("insight")).toHaveTextContent("0");
+    await user.click(screen.getByRole("button", { name: "Prestige" }));
+
+    const dialog = screen.getByRole("dialog");
+    expect(dialog).toHaveTextContent("Manual clear Tier 9 to gain Insight +1.");
+    expect(dialog).toHaveTextContent("Permanent upgrades");
+    const rewardCard = within(dialog).getByText("Reward Analysis").closest("article") as HTMLElement;
+    expect(rewardCard).toHaveTextContent("1 Insight, not enough Insight");
+    expect(within(rewardCard).getByRole("button", { name: "Buy" })).toBeDisabled();
+  });
+
+  it("marks Tier 9 manual clears as pending Insight and opens the prestige modal from clear", async () => {
+    seedTierNineClearPuzzle();
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.click(screen.getByTestId("piece-p0"));
+    await user.click(screen.getByTestId("cell-0"));
+
+    expect(screen.getByRole("dialog")).toHaveTextContent("Insight +1 is pending.");
+    await user.click(screen.getByRole("button", { name: "Prestige" }));
+    const dialog = screen.getByRole("dialog");
+    expect(dialog).toHaveTextContent("Pending Insight");
+    expect(within(dialog).getByRole("button", { name: "Prestige reset" })).toBeEnabled();
+  });
+
+  it("does not grant Insight for assisted Tier 9 clears", async () => {
+    seedTierNineClearPuzzle(true);
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.click(screen.getByRole("button", { name: "Forced Move" }));
+
+    const dialog = screen.getByRole("dialog");
+    expect(dialog).toHaveTextContent("Insight is earned only from manual Tier 9 clears.");
+    expect(within(dialog).queryByRole("button", { name: "Prestige" })).not.toBeInTheDocument();
+  });
+
+  it("resets normal progression on prestige while keeping Insight and permanent upgrades", async () => {
+    seedPrestigeReadySave();
+    const user = userEvent.setup();
+    render(<App />);
+
+    expect(screen.getByTestId("compute")).toHaveTextContent("1,234 C");
+    expect(screen.getByTestId("insight")).toHaveTextContent("2");
+    await user.click(screen.getByRole("button", { name: "Prestige +1" }));
+    await user.click(screen.getByRole("button", { name: "Prestige reset" }));
+    await user.click(screen.getByRole("button", { name: "Prestige reset" }));
+
+    expect(screen.getByTestId("compute")).toHaveTextContent("0 C");
+    expect(screen.getByTestId("insight")).toHaveTextContent("3");
+    expect(screen.getByText("Placement Scanner")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Prestige" }));
+    const rewardCard = screen.getByText("Reward Analysis").closest("article") as HTMLElement;
+    expect(rewardCard).toHaveTextContent("Level 1/10");
+    expect(screen.getByText("No pending Insight yet.")).toBeInTheDocument();
   });
 
   it("groups upgrades into tabs and sorts the default tab by lowest price", async () => {

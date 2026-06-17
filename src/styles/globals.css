@@ -687,6 +687,28 @@ button:disabled {
   min-height: 30px;
 }
 
+.prestige-body {
+  max-height: min(860px, calc(100vh - 32px));
+}
+
+.prestige-summary {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.prestige-summary .metric {
+  padding: 8px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--surface-2);
+}
+
+.prestige-upgrade-list {
+  display: grid;
+  gap: 8px;
+}
+
 .inspection-message {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
