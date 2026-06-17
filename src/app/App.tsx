@@ -41,6 +41,10 @@ type SolverRunSession = Readonly<{
 
 type UpgradeTabId = "feature" | "tier" | "solver";
 type UpgradeSortOrder = "price-asc" | "config";
+type PendingConfirmation =
+  | Readonly<{ type: "reset-board" }>
+  | Readonly<{ type: "new-puzzle"; daily: boolean }>
+  | Readonly<{ type: "switch-tier"; tier: number; timestamp: number }>;
 
 type SolverUiState = Readonly<{
   status: SolverStats["status"];
@@ -257,6 +261,7 @@ const COPY = {
     rotateLeft: "Rotate Left",
     rotateRight: "Rotate Right",
     removePiece: "Remove Piece",
+    resetConfirmBody: "Remove all placed pieces from this puzzle? This keeps the current tier and seed.",
     hint: "Hint",
     check: "Check",
     forcedMove: "Forced Move",
@@ -356,6 +361,8 @@ const COPY = {
     autoSolverLocked: "Auto Solver is locked.",
     autoSolverManualLocked: (tier: number, count: number, required: number) => `Auto Solver requires ${required} manual clears on Tier ${tier} (${count}/${required}).`,
     discardCurrentPuzzle: "Discard current puzzle?",
+    discardConfirmBody: "Placed pieces and current progress will be lost.",
+    discardConfirmAction: "Discard and continue",
     contradictionFound: "This position cannot be completed.",
     contradictionClear: "No contradiction found.",
     noLegalPlacement: "No legal placement covers that cell.",
@@ -411,6 +418,7 @@ const COPY = {
     rotateLeft: "左回転",
     rotateRight: "右回転",
     removePiece: "ピースを外す",
+    resetConfirmBody: "配置済みピースをすべて外します。現在の Tier とシードは維持されます。",
     hint: "ヒント",
     check: "検査",
     forcedMove: "強制手",
@@ -510,6 +518,8 @@ const COPY = {
     autoSolverLocked: "自動ソルバーは未解放です。",
     autoSolverManualLocked: (tier: number, count: number, required: number) => `自動ソルバーには Tier ${tier} の手動クリアが ${required} 回必要です（${count}/${required}）。`,
     discardCurrentPuzzle: "現在のパズルを破棄しますか?",
+    discardConfirmBody: "配置済みピースと進行中の状態は失われます。",
+    discardConfirmAction: "破棄して続行",
     contradictionFound: "この局面は完成できません。",
     contradictionClear: "矛盾は見つかりませんでした。",
     noLegalPlacement: "そのセルを覆える合法配置がありません。",
@@ -974,8 +984,17 @@ function reducer(state: AppState, action: Action): AppState {
         undoStack: [...state.undoStack, state.puzzle.board],
       });
     }
-    case "reset-board":
-      return withSavedPuzzle(state, { puzzle: { ...state.puzzle, board: createEmptyBoard(), cleared: false }, undoStack: [...state.undoStack, state.puzzle.board], redoStack: [] });
+    case "reset-board": {
+      const hasPlacements = boardPlacements(state.puzzle.board).length > 0;
+      return withSavedPuzzle(state, {
+        puzzle: { ...state.puzzle, board: createEmptyBoard(), cleared: false },
+        undoStack: hasPlacements ? [...state.undoStack, state.puzzle.board] : state.undoStack,
+        redoStack: [],
+        clearResult: null,
+        inspectionMessage: null,
+        scannerEnabled: false,
+      });
+    }
     case "new-puzzle":
       return withSavedPuzzle(state, {
         puzzle: { definition: action.puzzle, board: createEmptyBoard(), classification: "manual", startedAt: Date.now(), cleared: false },
@@ -1445,6 +1464,7 @@ export function App() {
   const [activeUpgradeTab, setActiveUpgradeTab] = useState<UpgradeTabId>("feature");
   const [upgradeSortOrder, setUpgradeSortOrder] = useState<UpgradeSortOrder>("price-asc");
   const [hideCompletedUpgradeTabs, setHideCompletedUpgradeTabs] = useState(false);
+  const [pendingConfirmation, setPendingConfirmation] = useState<PendingConfirmation | null>(null);
   const [boardViewportRef, boardViewportSize] = useMeasuredElement<HTMLDivElement>();
 
   useEffect(() => {
@@ -1683,12 +1703,30 @@ export function App() {
     }
   };
 
-  const startNewPuzzle = (daily: boolean) => {
-    if (boardPlacements(state.puzzle.board).length > 0 && !state.puzzle.cleared && !window.confirm(copy.discardCurrentPuzzle)) {
+  const requestResetBoard = () => {
+    if (boardPlacements(state.puzzle.board).length > 0) {
+      setPendingConfirmation({ type: "reset-board" });
       return;
     }
+    dispatch({ type: "reset-board" });
+  };
+
+  const createNewPuzzle = (daily: boolean) => {
     const seed = daily ? dailySeed(state.save.progression.selectedTier) : `seed-${state.save.progression.selectedTier}-${Date.now()}`;
     dispatch({ type: "new-puzzle", puzzle: generatePuzzle({ tier: state.save.progression.selectedTier, seed }) });
+  };
+
+  const startNewPuzzle = (daily: boolean) => {
+    if (boardPlacements(state.puzzle.board).length > 0 && !state.puzzle.cleared) {
+      setPendingConfirmation({ type: "new-puzzle", daily });
+      return;
+    }
+    createNewPuzzle(daily);
+  };
+
+  const applyTierSwitch = (tier: number, timestamp: number) => {
+    dispatch({ type: "set-tier", tier });
+    dispatch({ type: "new-puzzle", puzzle: generatePuzzle({ tier, seed: `tier-${tier}-${timestamp}` }) });
   };
 
   const switchTier = (tier: number, timestamp: number) => {
@@ -1698,11 +1736,26 @@ export function App() {
     if (state.save.progression.selectedTier === tier && puzzle.tier === tier) {
       return;
     }
-    if (boardPlacements(state.puzzle.board).length > 0 && !state.puzzle.cleared && !window.confirm(copy.discardCurrentPuzzle)) {
+    if (boardPlacements(state.puzzle.board).length > 0 && !state.puzzle.cleared) {
+      setPendingConfirmation({ type: "switch-tier", tier, timestamp });
       return;
     }
-    dispatch({ type: "set-tier", tier });
-    dispatch({ type: "new-puzzle", puzzle: generatePuzzle({ tier, seed: `tier-${tier}-${timestamp}` }) });
+    applyTierSwitch(tier, timestamp);
+  };
+
+  const confirmPendingAction = () => {
+    const action = pendingConfirmation;
+    setPendingConfirmation(null);
+    if (!action) {
+      return;
+    }
+    if (action.type === "reset-board") {
+      dispatch({ type: "reset-board" });
+    } else if (action.type === "new-puzzle") {
+      createNewPuzzle(action.daily);
+    } else {
+      applyTierSwitch(action.tier, action.timestamp);
+    }
   };
 
   const useContradictionDetector = () => {
@@ -1800,10 +1853,13 @@ export function App() {
       if (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement || target instanceof HTMLSelectElement) {
         return;
       }
-      if (event.key === "ArrowRight" || event.key === "d" || event.key === "D" || event.key === "r" || event.key === "E") {
+      if ((event.key === "r" || event.key === "R") && !event.ctrlKey && !event.metaKey && !event.altKey) {
+        event.preventDefault();
+        requestResetBoard();
+      } else if (event.key === "ArrowRight" || event.key === "d" || event.key === "D" || event.key === "E") {
         event.preventDefault();
         dispatch({ type: "rotate", direction: 1 });
-      } else if (event.key === "ArrowLeft" || event.key === "a" || event.key === "A" || event.key === "Q" || (event.key === "R" && event.shiftKey)) {
+      } else if (event.key === "ArrowLeft" || event.key === "a" || event.key === "A" || event.key === "Q") {
         event.preventDefault();
         dispatch({ type: "rotate", direction: -1 });
       } else if (event.key === "z" || (event.key === "z" && event.ctrlKey)) {
@@ -1908,7 +1964,7 @@ export function App() {
           <div className="controls">
             <button type="button" onClick={() => startNewPuzzle(false)}>{copy.newPuzzle}</button>
             <button type="button" onClick={() => startNewPuzzle(true)}>{copy.dailySeed}</button>
-            <button type="button" onClick={() => dispatch({ type: "reset-board" })}>{copy.resetBoard}</button>
+            <button type="button" onClick={requestResetBoard}>{copy.resetBoard}</button>
             <button type="button" onClick={() => dispatch({ type: "undo" })} disabled={state.undoStack.length === 0}>{copy.undo}</button>
             <button type="button" onClick={() => dispatch({ type: "redo" })} disabled={state.redoStack.length === 0}>{copy.redo}</button>
             <button type="button" onClick={() => dispatch({ type: "rotate", direction: -1 })}>{copy.rotateLeft}</button>
@@ -2124,6 +2180,19 @@ export function App() {
           </section>
         </aside>
       </section>
+
+      {pendingConfirmation && (
+        <div className="modal" role="dialog" aria-modal="true">
+          <div className="modal-body">
+            <h2>{pendingConfirmation.type === "reset-board" ? copy.resetBoard : copy.discardCurrentPuzzle}</h2>
+            <p>{pendingConfirmation.type === "reset-board" ? copy.resetConfirmBody : copy.discardConfirmBody}</p>
+            <button type="button" onClick={confirmPendingAction}>
+              {pendingConfirmation.type === "reset-board" ? copy.resetBoard : copy.discardConfirmAction}
+            </button>
+            <button type="button" onClick={() => setPendingConfirmation(null)}>{copy.cancel}</button>
+          </div>
+        </div>
+      )}
 
       {state.clearResult && (
         <div className="modal" role="dialog" aria-modal="true">

@@ -295,6 +295,53 @@ describe("App", () => {
     expect(piece).toHaveTextContent("rot 0");
   });
 
+  it("uses R for board reset with an in-app confirmation dialog", async () => {
+    seedTwoPiecePuzzle();
+    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(false);
+    const user = userEvent.setup();
+    render(<App />);
+    const piece = screen.getByTestId("piece-p0");
+    const cell = screen.getByTestId("cell-0");
+
+    await user.click(piece);
+    await user.click(cell);
+    expect(piece).toHaveTextContent("Placed");
+
+    await user.keyboard("r");
+    expect(confirmSpy).not.toHaveBeenCalled();
+    const dialog = screen.getByRole("dialog");
+    expect(dialog).toHaveTextContent("Reset Board");
+    expect(dialog).toHaveTextContent("Remove all placed pieces");
+    expect(piece).toHaveTextContent("Placed");
+
+    await user.click(within(dialog).getByRole("button", { name: "Reset Board" }));
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(piece).toHaveTextContent("Ready");
+    expect(cell).toHaveTextContent("");
+  });
+
+  it("uses an in-app confirmation dialog before discarding the current puzzle", async () => {
+    seedTwoPiecePuzzle();
+    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(false);
+    const user = userEvent.setup();
+    render(<App />);
+    const piece = screen.getByTestId("piece-p0");
+
+    await user.click(piece);
+    await user.click(screen.getByTestId("cell-0"));
+    await user.click(screen.getByRole("button", { name: "New Puzzle" }));
+
+    expect(confirmSpy).not.toHaveBeenCalled();
+    const dialog = screen.getByRole("dialog");
+    expect(dialog).toHaveTextContent("Discard current puzzle?");
+    expect(dialog).toHaveTextContent("Placed pieces and current progress will be lost.");
+    expect(piece).toHaveTextContent("Placed");
+
+    await user.click(within(dialog).getByRole("button", { name: "Discard and continue" }));
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(screen.queryByText("two-piece-fixture")).not.toBeInTheDocument();
+  });
+
   it("rotates the selected piece with board wheel direction", async () => {
     seedKeyboardRotationPuzzle();
     const user = userEvent.setup();
