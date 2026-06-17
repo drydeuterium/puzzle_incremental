@@ -505,6 +505,9 @@ type AppCopy = (typeof COPY)[keyof typeof COPY];
 const COMPUTE_RATE_WINDOW_MS = 60_000;
 const COMPUTE_RATE_TICK_MS = 1_000;
 const PANEL_LAYOUT_STORAGE_KEY = "puzzle_incremental.panelLayout.v2";
+const BOARD_GAP_PIXELS = 4;
+const BOARD_MAX_CELL_PIXELS = 64;
+const BOARD_MIN_CELL_PIXELS = 10;
 
 type PanelLayout = Readonly<{
   left: number;
@@ -514,6 +517,11 @@ type PanelLayout = Readonly<{
 }>;
 
 type PanelResizeKind = "left" | "right" | "center-solver" | "right-status";
+
+type ElementSize = Readonly<{
+  width: number;
+  height: number;
+}>;
 
 const DEFAULT_PANEL_LAYOUT: PanelLayout = {
   left: 330,
@@ -562,6 +570,46 @@ function panelLayoutStyle(layout: PanelLayout): React.CSSProperties {
     "--center-solver-height": `${layout.centerSolver}px`,
     "--right-status-height": `${layout.rightStatus}px`,
   } as React.CSSProperties;
+}
+
+function useMeasuredElement<T extends HTMLElement>(): readonly [React.RefObject<T | null>, ElementSize] {
+  const ref = useRef<T>(null);
+  const [size, setSize] = useState<ElementSize>({ width: 0, height: 0 });
+
+  useEffect(() => {
+    const element = ref.current;
+    if (!element || typeof ResizeObserver === "undefined") {
+      return undefined;
+    }
+    const update = (width: number, height: number) => {
+      setSize((current) => (current.width === width && current.height === height ? current : { width, height }));
+    };
+    const rect = element.getBoundingClientRect();
+    update(rect.width, rect.height);
+    const observer = new ResizeObserver((entries) => {
+      const entry = entries[0];
+      if (entry) {
+        update(entry.contentRect.width, entry.contentRect.height);
+      }
+    });
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, []);
+
+  return [ref, size] as const;
+}
+
+function boardCellSize(size: ElementSize, columns: number, rows: number): number | null {
+  if (size.width <= 0 || size.height <= 0 || columns <= 0 || rows <= 0) {
+    return null;
+  }
+  const usableWidth = size.width - BOARD_GAP_PIXELS * (columns - 1);
+  const usableHeight = size.height - BOARD_GAP_PIXELS * (rows - 1);
+  const rawSize = Math.min(usableWidth / columns, usableHeight / rows, BOARD_MAX_CELL_PIXELS);
+  if (!Number.isFinite(rawSize)) {
+    return null;
+  }
+  return Math.max(BOARD_MIN_CELL_PIXELS, Math.floor(rawSize));
 }
 
 function pieceIdSortValue(id: string): number {
@@ -1307,6 +1355,7 @@ export function App() {
   const [eraseText, setEraseText] = useState("");
   const [computePerSecond, setComputePerSecond] = useState(0);
   const [panelLayout, setPanelLayout] = useState<PanelLayout>(loadPanelLayout);
+  const [boardViewportRef, boardViewportSize] = useMeasuredElement<HTMLDivElement>();
 
   useEffect(() => {
     try {
@@ -1366,6 +1415,24 @@ export function App() {
   }, [state.save.createdAt, state.save.economy.lifetimeCompute]);
 
   const puzzle = state.puzzle.definition;
+  const measuredBoardCellSize = useMemo(
+    () => boardCellSize(boardViewportSize, puzzle.width, puzzle.height),
+    [boardViewportSize, puzzle.height, puzzle.width],
+  );
+  const boardStyle = useMemo(() => {
+    const measuredStyle = measuredBoardCellSize
+      ? {
+          "--board-cell-size": `${measuredBoardCellSize}px`,
+          gridTemplateRows: `repeat(${puzzle.height}, var(--board-cell-size))`,
+        }
+      : {};
+    return {
+      ...measuredStyle,
+      gridTemplateColumns: measuredBoardCellSize
+        ? `repeat(${puzzle.width}, var(--board-cell-size))`
+        : `repeat(${puzzle.width}, minmax(28px, 1fr))`,
+    } as React.CSSProperties;
+  }, [measuredBoardCellSize, puzzle.height, puzzle.width]);
   const placedByCell = useMemo(() => {
     const map = new Map<number, Placement>();
     for (const placement of boardPlacements(state.puzzle.board)) {
@@ -1782,39 +1849,41 @@ export function App() {
                 ))}
               </div>
             </div>
-            <div
-              className="board"
-              style={{ gridTemplateColumns: `repeat(${puzzle.width}, minmax(28px, 1fr))` }}
-              role="grid"
-              aria-label={copy.boardLabel}
-              onMouseLeave={() => setHoverCell(null)}
-              onWheel={handleBoardWheel}
-              onContextMenu={handleBoardContextMenu}
-            >
-              {Array.from({ length: puzzle.width * puzzle.height }, (_, index) => {
-                const placed = placedByCell.get(index);
-                const blocked = puzzle.blockedCellIndices.includes(index);
-                const preview = previewCells.has(index);
-                const scanner = scannerCells.has(index);
-                const solverPreview = solverPreviewCells.has(index);
-                const selectedPlacement = placed?.pieceId === state.selectedPieceId;
-                return (
-                  <button
-                    key={index}
-                    type="button"
-                    data-testid={`cell-${index}`}
-                    role="gridcell"
-                    className={`cell ${blocked ? "blocked" : ""} ${placed ? "placed" : ""} ${selectedPlacement ? "selected-placement" : ""} ${preview && !invalidPreview ? "preview" : ""} ${preview && invalidPreview ? "invalid-preview" : ""} ${scanner ? "scanner" : ""} ${solverPreview ? "solver-preview" : ""}`}
-                    style={mergeCellStyle(placed, preview && selectedPiece ? selectedPiece : null, puzzle.seed)}
-                    disabled={blocked || state.puzzle.cleared}
-                    onMouseEnter={() => setHoverCell(index)}
-                    onFocus={() => setHoverCell(index)}
-                    onClick={() => handleCellClick(index)}
-                  >
-                    {placed?.pieceType ?? ""}
-                  </button>
-                );
-              })}
+            <div className="board-viewport" ref={boardViewportRef}>
+              <div
+                className={`board ${measuredBoardCellSize ? "board-measured" : ""}`}
+                style={boardStyle}
+                role="grid"
+                aria-label={copy.boardLabel}
+                onMouseLeave={() => setHoverCell(null)}
+                onWheel={handleBoardWheel}
+                onContextMenu={handleBoardContextMenu}
+              >
+                {Array.from({ length: puzzle.width * puzzle.height }, (_, index) => {
+                  const placed = placedByCell.get(index);
+                  const blocked = puzzle.blockedCellIndices.includes(index);
+                  const preview = previewCells.has(index);
+                  const scanner = scannerCells.has(index);
+                  const solverPreview = solverPreviewCells.has(index);
+                  const selectedPlacement = placed?.pieceId === state.selectedPieceId;
+                  return (
+                    <button
+                      key={index}
+                      type="button"
+                      data-testid={`cell-${index}`}
+                      role="gridcell"
+                      className={`cell ${blocked ? "blocked" : ""} ${placed ? "placed" : ""} ${selectedPlacement ? "selected-placement" : ""} ${preview && !invalidPreview ? "preview" : ""} ${preview && invalidPreview ? "invalid-preview" : ""} ${scanner ? "scanner" : ""} ${solverPreview ? "solver-preview" : ""}`}
+                      style={mergeCellStyle(placed, preview && selectedPiece ? selectedPiece : null, puzzle.seed)}
+                      disabled={blocked || state.puzzle.cleared}
+                      onMouseEnter={() => setHoverCell(index)}
+                      onFocus={() => setHoverCell(index)}
+                      onClick={() => handleCellClick(index)}
+                    >
+                      {placed?.pieceType ?? ""}
+                    </button>
+                  );
+                })}
+              </div>
             </div>
             {state.inspectionMessage && (
               <div className="inspection-message" role="status" aria-live="polite">

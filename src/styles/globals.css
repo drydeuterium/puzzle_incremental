@@ -301,6 +301,15 @@ button:disabled {
   padding: 4px 6px;
 }
 
+.board-viewport {
+  min-width: 0;
+  min-height: 0;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  padding: 10px 8px;
+}
+
 .board {
   align-self: center;
   justify-self: center;
@@ -308,6 +317,12 @@ button:disabled {
   gap: 4px;
   width: min(100%, 640px, calc(100vh - 320px));
   margin: 0;
+}
+
+.board.board-measured {
+  width: max-content;
+  max-width: 100%;
+  max-height: 100%;
 }
 
 .cell {
@@ -319,6 +334,14 @@ button:disabled {
   border-radius: 4px;
   background: var(--surface);
   font-weight: 800;
+}
+
+.board-measured .cell {
+  width: var(--board-cell-size);
+  height: var(--board-cell-size);
+  min-width: 0;
+  min-height: 0;
+  font-size: clamp(0.65rem, calc(var(--board-cell-size) * 0.34), 1rem);
 }
 
 .cell.placed {
