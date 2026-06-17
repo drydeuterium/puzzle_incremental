@@ -45,7 +45,7 @@ describe("save repository", () => {
     };
     storage.setItem("puzzle_incremental.save.v1", JSON.stringify(legacySave));
     const loaded = loadSave(storage);
-    expect(loaded.save.settings.language).toBe("en");
+    expect(loaded.save.settings.language).toBe("ja");
     expect(loaded.save.settings.notificationsEnabled).toBe(true);
     expect(loaded.save.settings.tutorialCompleted).toBe(false);
     expect(loaded.save.settings.hidePurchasedUpgrades).toBe(true);

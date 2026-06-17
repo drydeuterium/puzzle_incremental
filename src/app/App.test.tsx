@@ -10,7 +10,7 @@ function seedKeyboardRotationPuzzle(): void {
   const base = createInitialSave(now);
   const save = {
     ...base,
-    settings: { ...base.settings, tutorialCompleted: true },
+    settings: { ...base.settings, language: "en", tutorialCompleted: true },
     currentPuzzle: {
       definition: {
         id: "keyboard-rotation-fixture",
@@ -40,7 +40,7 @@ function seedTwoPiecePuzzle(): void {
   const base = createInitialSave(now);
   const save = {
     ...base,
-    settings: { ...base.settings, tutorialCompleted: true },
+    settings: { ...base.settings, language: "en", tutorialCompleted: true },
     currentPuzzle: {
       definition: {
         id: "two-piece-fixture",
@@ -76,7 +76,7 @@ function seedClearPuzzle(): void {
   ];
   const save = {
     ...base,
-    settings: { ...base.settings, tutorialCompleted: true },
+    settings: { ...base.settings, language: "en", tutorialCompleted: true },
     currentPuzzle: {
       definition: {
         id: "clear-fixture",
@@ -107,7 +107,7 @@ function seedUnsortedPiecePuzzle(): void {
   const base = createInitialSave(now);
   const save = {
     ...base,
-    settings: { ...base.settings, tutorialCompleted: true },
+    settings: { ...base.settings, language: "en", tutorialCompleted: true },
     currentPuzzle: {
       definition: {
         id: "unsorted-piece-fixture",
@@ -142,7 +142,7 @@ function seedPurchasedUpgrade(): void {
   const base = createInitialSave(now);
   const save = {
     ...base,
-    settings: { ...base.settings, tutorialCompleted: true },
+    settings: { ...base.settings, language: "en", tutorialCompleted: true },
     progression: {
       ...base.progression,
       upgradeLevels: {
@@ -160,7 +160,7 @@ function seedContradictionDetector(): void {
   const base = createInitialSave(now);
   const save = {
     ...base,
-    settings: { ...base.settings, tutorialCompleted: true },
+    settings: { ...base.settings, language: "en", tutorialCompleted: true },
     progression: {
       ...base.progression,
       upgradeLevels: {
@@ -197,7 +197,7 @@ function seedAutoSolverProgress(manualClears: number): void {
   const base = createInitialSave(now);
   const save = {
     ...base,
-    settings: { ...base.settings, tutorialCompleted: true },
+    settings: { ...base.settings, language: "en", tutorialCompleted: true },
     progression: {
       ...base.progression,
       upgradeLevels: {
@@ -222,28 +222,28 @@ describe("App", () => {
 
   it("renders compute, board, pieces, and locked upgrade reasons", () => {
     render(<App />);
-    expect(screen.getByRole("heading", { name: "Quick start" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "はじめ方" })).toBeInTheDocument();
     expect(screen.getByTestId("compute")).toHaveTextContent("0 C");
     expect(screen.getByText("Compute/s")).toBeInTheDocument();
     expect(screen.getByTestId("compute-per-second")).toHaveTextContent("0");
-    expect(screen.getByRole("grid", { name: "Puzzle board" })).toBeInTheDocument();
-    expect(screen.getAllByText(/Ready|Placed/).length).toBeGreaterThan(0);
-    expect(screen.getAllByText(/not enough Compute/).length).toBeGreaterThan(0);
+    expect(screen.getByRole("grid", { name: "パズル盤面" })).toBeInTheDocument();
+    expect(screen.getAllByText(/未配置|配置済み/).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/Compute不足/).length).toBeGreaterThan(0);
   });
 
   it("selects and rotates a piece", async () => {
     const user = userEvent.setup();
     render(<App />);
-    await user.click(screen.getByRole("button", { name: "Start Playing" }));
+    await user.click(screen.getByRole("button", { name: "始める" }));
     await user.click(screen.getByTestId("piece-p0"));
-    await user.click(screen.getByText("Rotate Right"));
-    expect(screen.getByTestId("piece-p0")).toHaveTextContent("rot");
+    await user.click(screen.getByText("右回転"));
+    expect(screen.getByTestId("piece-p0")).toHaveTextContent("回転");
   });
 
   it("renders tier selection through Tier 9", async () => {
     const user = userEvent.setup();
     render(<App />);
-    await user.click(screen.getByRole("button", { name: "Start Playing" }));
+    await user.click(screen.getByRole("button", { name: "始める" }));
 
     expect(screen.getByRole("button", { name: "Tier 0" })).toBeEnabled();
     expect(screen.getByRole("button", { name: "Tier 9" })).toBeDisabled();
@@ -393,12 +393,12 @@ describe("App", () => {
   it("shows theme settings", async () => {
     const user = userEvent.setup();
     render(<App />);
-    await user.click(screen.getByRole("button", { name: "Start Playing" }));
-    await user.click(screen.getByText("Settings"));
-    expect(screen.getByLabelText("Theme")).toHaveValue("system");
-    expect(screen.getByLabelText("Notifications")).toBeChecked();
-    await user.selectOptions(screen.getByLabelText("Theme"), "dark");
-    expect(screen.getByLabelText("Theme")).toHaveValue("dark");
+    await user.click(screen.getByRole("button", { name: "始める" }));
+    await user.click(screen.getByText("設定"));
+    expect(screen.getByLabelText("テーマ")).toHaveValue("system");
+    expect(screen.getByLabelText("通知")).toBeChecked();
+    await user.selectOptions(screen.getByLabelText("テーマ"), "dark");
+    expect(screen.getByLabelText("テーマ")).toHaveValue("dark");
   });
 
   it("can hide toast notifications", async () => {
@@ -417,17 +417,20 @@ describe("App", () => {
     expect(screen.queryByRole("status")).not.toBeInTheDocument();
   });
 
-  it("switches visible settings copy to Japanese", async () => {
+  it("starts with Japanese settings copy and can switch to English", async () => {
     const user = userEvent.setup();
     render(<App />);
-    await user.click(screen.getByRole("button", { name: "Start Playing" }));
-    await user.click(screen.getByText("Settings"));
-    await user.selectOptions(screen.getByLabelText("Language"), "ja");
+    await user.click(screen.getByRole("button", { name: "始める" }));
+    await user.click(screen.getByText("設定"));
     expect(screen.getByRole("heading", { name: "設定" })).toBeInTheDocument();
     expect(screen.getByLabelText("言語")).toHaveValue("ja");
     expect(screen.getByText("配置スキャナー")).toBeInTheDocument();
     expect(screen.getAllByText(/Compute不足/).length).toBeGreaterThan(0);
     expect(screen.getByTestId("solver-status")).toHaveTextContent("待機");
+
+    await user.selectOptions(screen.getByLabelText("言語"), "en");
+    expect(screen.getByRole("heading", { name: "Settings" })).toBeInTheDocument();
+    expect(screen.getByLabelText("Language")).toHaveValue("en");
   });
 
   it("hides purchased upgrades by default and can show them", async () => {
@@ -443,8 +446,8 @@ describe("App", () => {
   it("shows clearer solver efficiency upgrade names and descriptions", () => {
     render(<App />);
 
-    expect(screen.getByText("Solver Efficiency #1")).toBeInTheDocument();
-    expect(screen.getByText("Tries the most constrained empty cells first to reduce branching.")).toBeInTheDocument();
+    expect(screen.getByText("ソルバ効率化 #1")).toBeInTheDocument();
+    expect(screen.getByText("空きマスの候補が少ない場所から調べ、分岐を減らします。")).toBeInTheDocument();
   });
 
   it("requires five manual clears on the current tier before auto solver starts", () => {

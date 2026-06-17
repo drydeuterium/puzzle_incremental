@@ -13,7 +13,7 @@ export function defaultSettings(): UserSettings {
     animationSpeed: 1,
     highContrast: false,
     theme: "system",
-    language: "en",
+    language: "ja",
     notificationsEnabled: true,
     tutorialCompleted: false,
     hidePurchasedUpgrades: true,

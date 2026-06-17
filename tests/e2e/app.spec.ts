@@ -17,8 +17,8 @@ test("fresh start manual clear", async ({ page }) => {
     ];
     const save = {
       schemaVersion: 1,
-      gameConfigVersion: "1.4.0-hole-rebalance",
-      generatorVersion: 5,
+      gameConfigVersion: "1.4.1-horizontal-boards",
+      generatorVersion: 6,
       createdAt: now,
       updatedAt: now,
       economy: { compute: 0, lifetimeCompute: 0 },
@@ -51,7 +51,7 @@ test("fresh start manual clear", async ({ page }) => {
       currentPuzzle: {
         definition: {
           id: "e2e-fixture",
-          generatorVersion: 5,
+          generatorVersion: 6,
           tier: 0,
           seed: "e2e-fixture",
           width: 4,
@@ -108,14 +108,14 @@ test("fresh start manual clear", async ({ page }) => {
 });
 
 test("settings and persistence shell work", async ({ page }) => {
-  await page.getByRole("button", { name: "Start Playing" }).click();
-  await page.getByText("Settings").click();
-  await page.getByLabel("Visualization").selectOption("off");
-  await page.getByLabel("Theme").selectOption("dark");
-  await page.getByLabel("Language").selectOption("ja");
+  await page.getByRole("button", { name: "始める" }).click();
+  await page.getByRole("button", { name: "設定" }).click();
+  await page.getByLabel("可視化").selectOption("off");
+  await page.getByLabel("テーマ").selectOption("dark");
+  await page.getByLabel("言語").selectOption("ja");
   await page.getByText("閉じる").click();
   await page.reload();
-  await page.getByText("設定").click();
+  await page.getByRole("button", { name: "設定" }).click();
   await expect(page.getByLabel("可視化")).toHaveValue("off");
   await expect(page.getByLabel("テーマ")).toHaveValue("dark");
   await expect(page.getByLabel("言語")).toHaveValue("ja");
