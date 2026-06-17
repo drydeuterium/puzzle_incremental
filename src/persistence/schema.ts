@@ -1,4 +1,10 @@
 import { GAME_CONFIG } from "../game/config";
+import {
+  SOLVER_LANE_MIN_SESSION_MS_DEFAULT,
+  SOLVER_LANE_PREVIEW_UPDATE_MS_DEFAULT,
+  normalizeSolverLaneMinSessionMs,
+  normalizeSolverLanePreviewUpdateMs,
+} from "../game/settings";
 import { initialUpgradeState } from "../game/upgrades";
 import type { SaveDataV1, Statistics, UpgradeState, UserSettings } from "../core/types";
 
@@ -17,6 +23,8 @@ export function defaultSettings(): UserSettings {
     notificationsEnabled: true,
     tutorialCompleted: false,
     hidePurchasedUpgrades: true,
+    solverLaneMinSessionMs: SOLVER_LANE_MIN_SESSION_MS_DEFAULT,
+    solverLanePreviewUpdateMs: SOLVER_LANE_PREVIEW_UPDATE_MS_DEFAULT,
   };
 }
 
@@ -139,6 +147,8 @@ export function validateSaveData(value: unknown): SaveDataV1 | null {
       notificationsEnabled: typeof settings.notificationsEnabled === "boolean" ? settings.notificationsEnabled : defaults.notificationsEnabled,
       tutorialCompleted: typeof settings.tutorialCompleted === "boolean" ? settings.tutorialCompleted : defaults.tutorialCompleted,
       hidePurchasedUpgrades: typeof settings.hidePurchasedUpgrades === "boolean" ? settings.hidePurchasedUpgrades : defaults.hidePurchasedUpgrades,
+      solverLaneMinSessionMs: normalizeSolverLaneMinSessionMs(settings.solverLaneMinSessionMs),
+      solverLanePreviewUpdateMs: normalizeSolverLanePreviewUpdateMs(settings.solverLanePreviewUpdateMs),
     },
   };
   return normalized;

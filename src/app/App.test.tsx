@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, within } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { GAME_CONFIG } from "../game/config";
@@ -487,6 +487,27 @@ describe("App", () => {
     await user.click(screen.getByTestId("cell-0"));
 
     expect(screen.queryByRole("status")).not.toBeInTheDocument();
+  });
+
+  it("can adjust solver lane timing settings", async () => {
+    seedTwoPiecePuzzle();
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.click(screen.getByText("Settings"));
+    expect(screen.getByLabelText("Solver lane hold")).toHaveValue("1000");
+    expect(screen.getByLabelText("Solver preview interval")).toHaveValue("250");
+
+    await user.selectOptions(screen.getByLabelText("Solver lane hold"), "2500");
+    await user.selectOptions(screen.getByLabelText("Solver preview interval"), "750");
+
+    expect(screen.getByLabelText("Solver lane hold")).toHaveValue("2500");
+    expect(screen.getByLabelText("Solver preview interval")).toHaveValue("750");
+    await waitFor(() => {
+      const saved = JSON.parse(window.localStorage.getItem(SAVE_KEY) ?? "{}");
+      expect(saved.settings.solverLaneMinSessionMs).toBe(2500);
+      expect(saved.settings.solverLanePreviewUpdateMs).toBe(750);
+    });
   });
 
   it("starts with Japanese settings copy and can switch to English", async () => {

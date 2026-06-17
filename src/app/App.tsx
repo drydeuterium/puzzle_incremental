@@ -6,6 +6,12 @@ import { calculateReward } from "../core/rewards";
 import { enumerateOrientations, TETROMINO_TYPES } from "../core/tetrominoes";
 import type { BoardState, ClearClassification, PieceInstance, Placement, PlacementValidation, PuzzleDefinition, SaveDataV1, SolverSessionId, SolverStats, UpgradeId } from "../core/types";
 import { GAME_CONFIG } from "../game/config";
+import {
+  SOLVER_LANE_MIN_SESSION_MS_OPTIONS,
+  SOLVER_LANE_PREVIEW_UPDATE_MS_OPTIONS,
+  normalizeSolverLaneMinSessionMs,
+  normalizeSolverLanePreviewUpdateMs,
+} from "../game/settings";
 import { automatedRewardMultiplier, canPurchaseUpgrade, getUpgradePrice, isAutoSolverReady, isTierUnlocked, manualClearsForTier, nodesPerSecond, parallelSessions, solverOptionsFromUpgrades, type PurchaseOutcome } from "../game/upgrades";
 import { createInitialSave } from "../persistence/schema";
 import { eraseSave, exportSave, importSave, loadSave, saveGame } from "../persistence/saveRepository";
@@ -49,8 +55,6 @@ type PendingConfirmation =
   | Readonly<{ type: "switch-tier"; tier: number; timestamp: number }>;
 
 const SOLVER_LANE_SLOT_COUNT = 4;
-const SOLVER_LANE_MIN_SESSION_MS = 1000;
-const SOLVER_LANE_PREVIEW_UPDATE_MS = 250;
 const SOLVER_LANE_SESSION_STAGGER_MS = 140;
 
 type SolverUiState = Readonly<{
@@ -135,6 +139,8 @@ type Action =
   | Readonly<{ type: "set-language"; value: SaveDataV1["settings"]["language"] }>
   | Readonly<{ type: "set-notifications-enabled"; value: boolean }>
   | Readonly<{ type: "set-hide-purchased-upgrades"; value: boolean }>
+  | Readonly<{ type: "set-solver-lane-min-session-ms"; value: number }>
+  | Readonly<{ type: "set-solver-lane-preview-update-ms"; value: number }>
   | Readonly<{ type: "set-tutorial-open"; value: boolean }>
   | Readonly<{ type: "complete-tutorial" }>
   | Readonly<{ type: "solver-started"; sessionId: SolverSessionId }>
@@ -330,6 +336,8 @@ const COPY = {
     off: "Off",
     highContrast: "High contrast",
     notifications: "Notifications",
+    solverLaneHoldTime: "Solver lane hold",
+    solverLaneUpdateInterval: "Solver preview interval",
     exportSave: "Export Save",
     importSave: "Import Save",
     eraseSave: "Erase Save",
@@ -489,6 +497,8 @@ const COPY = {
     off: "オフ",
     highContrast: "高コントラスト",
     notifications: "通知",
+    solverLaneHoldTime: "ソルバー枠の保持時間",
+    solverLaneUpdateInterval: "ソルバー表示の更新間隔",
     exportSave: "セーブ出力",
     importSave: "セーブ読込",
     eraseSave: "セーブ削除",
@@ -1087,6 +1097,10 @@ function reducer(state: AppState, action: Action): AppState {
       return { ...state, toast: null, save: { ...state.save, settings: { ...state.save.settings, notificationsEnabled: action.value } } };
     case "set-hide-purchased-upgrades":
       return { ...state, save: { ...state.save, settings: { ...state.save.settings, hidePurchasedUpgrades: action.value } } };
+    case "set-solver-lane-min-session-ms":
+      return { ...state, save: { ...state.save, settings: { ...state.save.settings, solverLaneMinSessionMs: normalizeSolverLaneMinSessionMs(action.value) } } };
+    case "set-solver-lane-preview-update-ms":
+      return { ...state, save: { ...state.save, settings: { ...state.save.settings, solverLanePreviewUpdateMs: normalizeSolverLanePreviewUpdateMs(action.value) } } };
     case "set-tutorial-open":
       return { ...state, tutorialOpen: action.value };
     case "complete-tutorial":
@@ -1273,6 +1287,10 @@ function formatRate(value: number, language: SaveDataV1["settings"]["language"])
   }).format(value);
 }
 
+function formatMilliseconds(value: number): string {
+  return value >= 1000 && value % 1000 === 0 ? `${value / 1000}s` : `${value}ms`;
+}
+
 function measuredComputePerSecond(samples: readonly ComputeRateSample[]): number {
   if (samples.length < 2) {
     return 0;
@@ -1432,12 +1450,16 @@ function SolverLaneSlot({
   run,
   laneIndex,
   isUnlockedLane,
+  minSessionMs,
+  previewUpdateMs,
   language,
   copy,
 }: Readonly<{
   run: SolverRun | null;
   laneIndex: number;
   isUnlockedLane: boolean;
+  minSessionMs: number;
+  previewUpdateMs: number;
   language: SaveDataV1["settings"]["language"];
   copy: AppCopy;
 }>) {
@@ -1484,18 +1506,18 @@ function SolverLaneSlot({
         return clearPendingTimer;
       }
       const elapsedSincePreview = Date.now() - previewUpdatedAtRef.current;
-      if (!isActiveSolverStatus(run.status) || elapsedSincePreview >= SOLVER_LANE_PREVIEW_UPDATE_MS) {
+      if (!isActiveSolverStatus(run.status) || elapsedSincePreview >= previewUpdateMs) {
         scheduleDisplayRun(run, 0);
         return clearPendingTimer;
       }
-      scheduleDisplayRun(run, SOLVER_LANE_PREVIEW_UPDATE_MS - elapsedSincePreview);
+      scheduleDisplayRun(run, previewUpdateMs - elapsedSincePreview);
       return clearPendingTimer;
     }
 
     const elapsedSinceSessionShown = displayedSinceRef.current === 0
-      ? SOLVER_LANE_MIN_SESSION_MS
+      ? minSessionMs
       : Date.now() - displayedSinceRef.current;
-    if (!currentRun || elapsedSinceSessionShown >= SOLVER_LANE_MIN_SESSION_MS) {
+    if (!currentRun || elapsedSinceSessionShown >= minSessionMs) {
       scheduleDisplayRun(run, currentRun ? laneIndex * SOLVER_LANE_SESSION_STAGGER_MS : 0);
       return clearPendingTimer;
     }
@@ -1505,9 +1527,9 @@ function SolverLaneSlot({
       const latestRun = pendingRunRef.current;
       commitDisplayRun(latestRun);
       timerRef.current = null;
-    }, SOLVER_LANE_MIN_SESSION_MS - elapsedSinceSessionShown + laneIndex * SOLVER_LANE_SESSION_STAGGER_MS);
+    }, minSessionMs - elapsedSinceSessionShown + laneIndex * SOLVER_LANE_SESSION_STAGGER_MS);
     return clearPendingTimer;
-  }, [clearPendingTimer, commitDisplayRun, laneIndex, run, scheduleDisplayRun]);
+  }, [clearPendingTimer, commitDisplayRun, laneIndex, minSessionMs, previewUpdateMs, run, scheduleDisplayRun]);
 
   if (displayRun) {
     return <MiniSolverBoard run={displayRun} language={language} copy={copy} />;
@@ -2190,6 +2212,8 @@ export function App() {
                     run={run}
                     laneIndex={laneIndex}
                     isUnlockedLane={isUnlockedLane}
+                    minSessionMs={state.save.settings.solverLaneMinSessionMs}
+                    previewUpdateMs={state.save.settings.solverLanePreviewUpdateMs}
                     language={language}
                     copy={copy}
                   />
@@ -2358,6 +2382,20 @@ export function App() {
                 <option value="on">{copy.on}</option>
                 <option value="reduced">{copy.reduced}</option>
                 <option value="off">{copy.off}</option>
+              </select>
+            </label>
+            <label className="setting-field">{copy.solverLaneHoldTime}
+              <select value={state.save.settings.solverLaneMinSessionMs} onChange={(event) => dispatch({ type: "set-solver-lane-min-session-ms", value: Number(event.target.value) })}>
+                {SOLVER_LANE_MIN_SESSION_MS_OPTIONS.map((milliseconds) => (
+                  <option key={milliseconds} value={milliseconds}>{formatMilliseconds(milliseconds)}</option>
+                ))}
+              </select>
+            </label>
+            <label className="setting-field">{copy.solverLaneUpdateInterval}
+              <select value={state.save.settings.solverLanePreviewUpdateMs} onChange={(event) => dispatch({ type: "set-solver-lane-preview-update-ms", value: Number(event.target.value) })}>
+                {SOLVER_LANE_PREVIEW_UPDATE_MS_OPTIONS.map((milliseconds) => (
+                  <option key={milliseconds} value={milliseconds}>{formatMilliseconds(milliseconds)}</option>
+                ))}
               </select>
             </label>
             <label className="setting-toggle-row">

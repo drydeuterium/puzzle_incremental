@@ -123,6 +123,8 @@ export type UserSettings = Readonly<{
   notificationsEnabled: boolean;
   tutorialCompleted: boolean;
   hidePurchasedUpgrades: boolean;
+  solverLaneMinSessionMs: number;
+  solverLanePreviewUpdateMs: number;
 }>;
 
 export type Statistics = Readonly<{

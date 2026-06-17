@@ -49,6 +49,8 @@ describe("save repository", () => {
     expect(loaded.save.settings.notificationsEnabled).toBe(true);
     expect(loaded.save.settings.tutorialCompleted).toBe(false);
     expect(loaded.save.settings.hidePurchasedUpgrades).toBe(true);
+    expect(loaded.save.settings.solverLaneMinSessionMs).toBe(1000);
+    expect(loaded.save.settings.solverLanePreviewUpdateMs).toBe(250);
     expect(loaded.save.statistics.manualClearsByTier).toEqual({});
     expect(loaded.save.progression.upgradeLevels["tier-6"]).toBe(0);
     expect(loaded.save.progression.upgradeLevels["tier-9"]).toBe(0);
