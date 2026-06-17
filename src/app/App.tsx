@@ -506,7 +506,8 @@ const COMPUTE_RATE_WINDOW_MS = 60_000;
 const COMPUTE_RATE_TICK_MS = 1_000;
 const PANEL_LAYOUT_STORAGE_KEY = "puzzle_incremental.panelLayout.v2";
 const BOARD_GAP_PIXELS = 4;
-const BOARD_MAX_CELL_PIXELS = 64;
+const BOARD_MAX_CELL_PIXELS_BY_TIER = [88, 70, 76, 82, 76, 72, 66, 62, 60, 54] as const;
+const BOARD_DEFAULT_MAX_CELL_PIXELS = 54;
 const BOARD_MIN_CELL_PIXELS = 10;
 
 type PanelLayout = Readonly<{
@@ -599,13 +600,17 @@ function useMeasuredElement<T extends HTMLElement>(): readonly [React.RefObject<
   return [ref, size] as const;
 }
 
-function boardCellSize(size: ElementSize, columns: number, rows: number): number | null {
+function boardMaxCellPixels(tier: number): number {
+  return BOARD_MAX_CELL_PIXELS_BY_TIER[tier] ?? BOARD_DEFAULT_MAX_CELL_PIXELS;
+}
+
+function boardCellSize(size: ElementSize, columns: number, rows: number, tier: number): number | null {
   if (size.width <= 0 || size.height <= 0 || columns <= 0 || rows <= 0) {
     return null;
   }
   const usableWidth = size.width - BOARD_GAP_PIXELS * (columns - 1);
   const usableHeight = size.height - BOARD_GAP_PIXELS * (rows - 1);
-  const rawSize = Math.min(usableWidth / columns, usableHeight / rows, BOARD_MAX_CELL_PIXELS);
+  const rawSize = Math.min(usableWidth / columns, usableHeight / rows, boardMaxCellPixels(tier));
   if (!Number.isFinite(rawSize)) {
     return null;
   }
@@ -1423,8 +1428,8 @@ export function App() {
 
   const puzzle = state.puzzle.definition;
   const measuredBoardCellSize = useMemo(
-    () => boardCellSize(boardViewportSize, puzzle.width, puzzle.height),
-    [boardViewportSize, puzzle.height, puzzle.width],
+    () => boardCellSize(boardViewportSize, puzzle.width, puzzle.height, puzzle.tier),
+    [boardViewportSize, puzzle.height, puzzle.tier, puzzle.width],
   );
   const boardStyle = useMemo(() => {
     const measuredStyle = measuredBoardCellSize

@@ -307,7 +307,7 @@ button:disabled {
   display: grid;
   place-items: center;
   overflow: hidden;
-  padding: 10px 8px;
+  padding: 18px 16px;
 }
 
 .board {
