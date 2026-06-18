@@ -118,8 +118,8 @@ describe("generation and rewards", () => {
       { tier: 7, seed: "nine-by-seven-jagged", width: 9, height: 7, blocked: 19, interiorBlocked: 8, usable: 44, pieces: 11 },
       { tier: 8, seed: "eight-by-eight-jagged", width: 8, height: 8, blocked: 16, interiorBlocked: 6, usable: 48, pieces: 12 },
       { tier: 9, seed: "ten-by-nine-jagged", width: 10, height: 9, blocked: 26, interiorBlocked: 10, usable: 64, pieces: 16 },
-      { tier: 10, seed: "twelve-by-eight-ex-one", width: 12, height: 8, blocked: 24, interiorBlocked: 10, usable: 72, pieces: 18 },
-      { tier: 11, seed: "fourteen-by-eight-ex-two", width: 14, height: 8, blocked: 32, interiorBlocked: 13, usable: 80, pieces: 20 },
+      { tier: 10, seed: "fourteen-by-eight-ex-one", width: 14, height: 8, blocked: 28, interiorBlocked: 11, usable: 84, pieces: 21 },
+      { tier: 11, seed: "sixteen-by-nine-ex-two", width: 16, height: 9, blocked: 36, interiorBlocked: 14, usable: 108, pieces: 27 },
     ];
     for (const expected of planned) {
       const puzzle = generatePuzzle({ tier: expected.tier, seed: expected.seed });

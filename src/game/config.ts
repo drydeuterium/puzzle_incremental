@@ -58,8 +58,8 @@ function makeTier(input: TierInput): TierConfig {
 }
 
 export const GAME_CONFIG = {
-  gameConfigVersion: "1.8.0-ex-tiers-ui-scale",
-  generatorVersion: 6,
+  gameConfigVersion: "1.8.1-larger-ex-tiers",
+  generatorVersion: 7,
   currency: {
     name: "Compute",
     symbol: "C",
@@ -121,12 +121,12 @@ export const GAME_CONFIG = {
     makeTier({
       id: 10,
       label: "Tier EX-1",
-      width: 12,
+      width: 14,
       height: 8,
-      pieceCount: 18,
+      pieceCount: 21,
       shape: "jagged",
-      difficultyScoreMin: 260,
-      difficultyScoreMax: 1600,
+      difficultyScoreMin: 320,
+      difficultyScoreMax: 1900,
       unlockUpgradeId: null,
       prestigeUnlockCount: 1,
       autoSolverAllowed: false,
@@ -135,12 +135,12 @@ export const GAME_CONFIG = {
     makeTier({
       id: 11,
       label: "Tier EX-2",
-      width: 14,
-      height: 8,
-      pieceCount: 20,
+      width: 16,
+      height: 9,
+      pieceCount: 27,
       shape: "jagged",
-      difficultyScoreMin: 340,
-      difficultyScoreMax: 2200,
+      difficultyScoreMin: 440,
+      difficultyScoreMax: 2800,
       unlockUpgradeId: null,
       prestigeUnlockCount: 1,
       autoSolverAllowed: false,

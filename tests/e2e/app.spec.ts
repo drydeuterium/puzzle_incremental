@@ -18,7 +18,7 @@ test("fresh start manual clear", async ({ page }) => {
     const save = {
       schemaVersion: 1,
       gameConfigVersion: "1.5.0-economy-rebalance",
-      generatorVersion: 6,
+      generatorVersion: 7,
       createdAt: now,
       updatedAt: now,
       economy: { compute: 1000, lifetimeCompute: 1000 },
@@ -51,7 +51,7 @@ test("fresh start manual clear", async ({ page }) => {
       currentPuzzle: {
         definition: {
           id: "e2e-fixture",
-          generatorVersion: 6,
+          generatorVersion: 7,
           tier: 0,
           seed: "e2e-fixture",
           width: 4,
