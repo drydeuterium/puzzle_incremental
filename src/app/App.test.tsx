@@ -478,6 +478,13 @@ describe("App", () => {
     expect(screen.queryByRole("button", { name: "Tier EX-2" })).not.toBeInTheDocument();
   });
 
+  it("shows manual clear progress for the current puzzle tier", () => {
+    seedPrestigeReadySave();
+    render(<App />);
+
+    expect(screen.getByTestId("puzzle-manual-clears")).toHaveTextContent("Manual clears 1/5");
+  });
+
   it("rotates the selected piece with arrow keys and A/D", async () => {
     seedKeyboardRotationPuzzle();
     const user = userEvent.setup();

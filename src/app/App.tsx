@@ -851,6 +851,11 @@ function unsupportedAutoTierMessage(language: SaveDataV1["settings"]["language"]
   return language === "en" ? `${label} cannot be automated.` : `${label} は自動ソルバー対象外です。`;
 }
 
+function manualClearProgressLabel(language: SaveDataV1["settings"]["language"], count: number, required: number): string {
+  const cappedCount = Math.min(count, required);
+  return language === "en" ? `Manual clears ${cappedCount}/${required}` : `手動クリア ${cappedCount}/${required}`;
+}
+
 function prestigeUpgradeName(copy: AppCopy, id: PrestigeUpgradeId): string {
   return copy.prestigeUpgradeNames[id];
 }
@@ -1983,6 +1988,7 @@ export function App() {
     : [];
   const manualClearsAutoTier = manualClearsForTier(state.save.run.manualClearsByTier, state.solver.autoTier);
   const autoSolverRequiredManualClears = GAME_CONFIG.solver.manualClearsRequiredByTierForAutoSolver;
+  const manualClearsPuzzleTier = manualClearsForTier(state.save.run.manualClearsByTier, puzzle.tier);
   const autoSolverTierSupported = isAutoSolverTierSupported(state.solver.autoTier);
   const selectedTierAutoSolverSupported = isAutoSolverTierSupported(state.save.progression.selectedTier);
   const autoSolverReady = autoSolverTierSupported
@@ -2455,7 +2461,12 @@ export function App() {
           <section className="panel puzzle-panel">
             <div className="board-top">
               <div className="board-header">
-                <span>{tierLabel(copy, puzzle.tier)}</span>
+                <span className="board-tier-summary">
+                  <span>{tierLabel(copy, puzzle.tier)}</span>
+                  <span className="board-tier-manual-clears" data-testid="puzzle-manual-clears">
+                    {manualClearProgressLabel(language, manualClearsPuzzleTier, autoSolverRequiredManualClears)}
+                  </span>
+                </span>
                 <button type="button" onClick={() => navigator.clipboard?.writeText(puzzle.seed)}>{copy.seed}: {puzzle.seed}</button>
                 <span>{copy.difficulty} {puzzle.difficulty.score}</span>
                 <span>{classificationLabel(copy, state.puzzle.classification)}</span>
