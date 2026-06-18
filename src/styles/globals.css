@@ -63,7 +63,7 @@ button:disabled {
 .topbar {
   z-index: 5;
   display: grid;
-  grid-template-columns: minmax(180px, 1fr) minmax(0, auto);
+  grid-template-columns: minmax(180px, 1fr) minmax(0, auto) minmax(180px, 1fr);
   flex: 0 0 auto;
   gap: 12px;
   align-items: center;
@@ -75,6 +75,16 @@ button:disabled {
 .topbar h1 {
   margin: 0;
   font-size: 22px;
+}
+
+.topbar-prestige {
+  display: flex;
+  justify-content: center;
+  min-width: 0;
+}
+
+.topbar-prestige button {
+  min-width: 132px;
 }
 
 .topbar-actions {

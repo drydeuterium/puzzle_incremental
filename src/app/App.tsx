@@ -2291,19 +2291,31 @@ export function App() {
 
   const theme = state.save.settings.theme ?? "system";
   const appClassName = ["app", state.save.settings.highContrast ? "high-contrast" : "", theme === "dark" ? "dark" : "", theme === "light" ? "light" : ""].filter(Boolean).join(" ");
+  const prestigeVisible = (state.save.progression.upgradeLevels["tier-9"] ?? 0) > 0
+    || state.save.prestige.count > 0
+    || state.save.prestige.insight > 0
+    || state.save.prestige.lifetimeInsight > 0
+    || state.save.prestige.pendingInsight > 0;
+  const prestigeButtonLabel = state.save.prestige.pendingInsight > 0
+    ? `${copy.prestige} +${state.save.prestige.pendingInsight}`
+    : copy.prestige;
 
   return (
     <main className={appClassName}>
       <header className="topbar">
         <h1>puzzle_incremental</h1>
+        <div className="topbar-prestige">
+          {prestigeVisible && (
+            <button type="button" onClick={() => dispatch({ type: "set-prestige-open", value: true })}>
+              {prestigeButtonLabel}
+            </button>
+          )}
+        </div>
         <div className="topbar-actions">
           <div className="metric"><span>{copy.compute}</span><strong data-testid="compute">{formatNumber(state.save.economy.compute, language)} C</strong></div>
           <div className="metric"><span>{copy.computePerSecond}</span><strong data-testid="compute-per-second">{formatRate(computePerSecond, language)}</strong></div>
           <div className="metric"><span>{copy.nodesPerSecond}</span><strong>{formatNumber(state.solver.stats?.measuredNodesPerSecond ?? 0, language)}</strong></div>
           <div className="metric"><span>{copy.insight}</span><strong data-testid="insight">{formatNumber(state.save.prestige.insight, language)}</strong></div>
-          <button type="button" onClick={() => dispatch({ type: "set-prestige-open", value: true })}>
-            {state.save.prestige.pendingInsight > 0 ? `${copy.prestige} +${state.save.prestige.pendingInsight}` : copy.prestige}
-          </button>
           <button type="button" onClick={() => dispatch({ type: "set-tutorial-open", value: true })}>{copy.tutorial}</button>
           <button type="button" onClick={() => dispatch({ type: "set-settings-open", value: true })}>{copy.settings}</button>
           <button type="button" onClick={() => dispatch({ type: "set-stats-open", value: true })}>{copy.stats}</button>

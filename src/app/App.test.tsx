@@ -703,8 +703,16 @@ describe("App", () => {
     expect(within(tierOneCard).getByRole("button", { name: "Buy" })).toBeEnabled();
   });
 
-  it("shows prestige state and permanent upgrades in a separate modal", async () => {
+  it("hides the topbar prestige button until the prestige system is unlocked", () => {
     seedTwoPiecePuzzle();
+    render(<App />);
+
+    expect(screen.getByTestId("insight")).toHaveTextContent("0");
+    expect(screen.queryByRole("button", { name: "Prestige" })).not.toBeInTheDocument();
+  });
+
+  it("shows prestige state and permanent upgrades in a separate modal after Tier 9 is unlocked", async () => {
+    seedTierNineClearPuzzle();
     const user = userEvent.setup();
     render(<App />);
 
