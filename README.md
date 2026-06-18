@@ -116,6 +116,8 @@ npm run build
 npm run test:e2e
 ```
 
+ローカルの E2E はインストール済みの Microsoft Edge を使います。CI では Chromium を使います。
+
 Playwright のブラウザが未インストールの場合:
 
 ```bash

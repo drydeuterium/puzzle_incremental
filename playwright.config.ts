@@ -1,4 +1,12 @@
-import { defineConfig, devices } from "@playwright/test";
+import { defineConfig, devices, type PlaywrightTestConfig } from "@playwright/test";
+
+const projects: PlaywrightTestConfig["projects"] = process.env.CI
+  ? [
+      { name: "chromium", use: { ...devices["Desktop Chrome"] } },
+    ]
+  : [
+      { name: "msedge", use: { ...devices["Desktop Chrome"], channel: "msedge" } },
+    ];
 
 export default defineConfig({
   testDir: "./tests/e2e",
@@ -14,7 +22,5 @@ export default defineConfig({
     reuseExistingServer: !process.env.CI,
     timeout: 120000,
   },
-  projects: [
-    { name: "chromium", use: { ...devices["Desktop Chrome"] } },
-  ],
+  projects,
 });
