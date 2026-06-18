@@ -2,8 +2,10 @@ import { GAME_CONFIG } from "../game/config";
 import {
   SOLVER_LANE_MIN_SESSION_MS_DEFAULT,
   SOLVER_LANE_PREVIEW_UPDATE_MS_DEFAULT,
+  UI_SCALE_DEFAULT,
   normalizeSolverLaneMinSessionMs,
   normalizeSolverLanePreviewUpdateMs,
+  normalizeUiScale,
 } from "../game/settings";
 import { createInitialPrestigeState, initialPrestigeUpgradeState } from "../game/prestige";
 import { initialUpgradeState } from "../game/upgrades";
@@ -26,6 +28,7 @@ export function defaultSettings(): UserSettings {
     hidePurchasedUpgrades: true,
     solverLaneMinSessionMs: SOLVER_LANE_MIN_SESSION_MS_DEFAULT,
     solverLanePreviewUpdateMs: SOLVER_LANE_PREVIEW_UPDATE_MS_DEFAULT,
+    uiScale: UI_SCALE_DEFAULT,
   };
 }
 
@@ -211,6 +214,7 @@ export function validateSaveData(value: unknown): SaveDataV1 | null {
       hidePurchasedUpgrades: typeof settings.hidePurchasedUpgrades === "boolean" ? settings.hidePurchasedUpgrades : defaults.hidePurchasedUpgrades,
       solverLaneMinSessionMs: normalizeSolverLaneMinSessionMs(settings.solverLaneMinSessionMs),
       solverLanePreviewUpdateMs: normalizeSolverLanePreviewUpdateMs(settings.solverLanePreviewUpdateMs),
+      uiScale: normalizeUiScale(settings.uiScale),
     },
   };
   return normalized;

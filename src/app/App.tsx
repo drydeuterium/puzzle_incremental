@@ -13,8 +13,12 @@ import {
   SOLVER_LANE_PREVIEW_UPDATE_MS_MAX,
   SOLVER_LANE_PREVIEW_UPDATE_MS_MIN,
   SOLVER_LANE_PREVIEW_UPDATE_MS_STEP,
+  UI_SCALE_MAX,
+  UI_SCALE_MIN,
+  UI_SCALE_STEP,
   normalizeSolverLaneMinSessionMs,
   normalizeSolverLanePreviewUpdateMs,
+  normalizeUiScale,
 } from "../game/settings";
 import { canPurchasePrestigeUpgrade, getPrestigeUpgradePrice, prestigeRewardMultiplier, PRESTIGE_UPGRADES, type PrestigePurchaseOutcome } from "../game/prestige";
 import { automatedRewardMultiplier, canPurchaseUpgrade, getUpgradePrice, initialUpgradeState, isAutoSolverReady, isTierUnlocked, manualClearsForTier, nodesPerSecond, parallelSessions, solverOptionsFromUpgrades, type PurchaseOutcome } from "../game/upgrades";
@@ -86,7 +90,7 @@ type AppState = Readonly<{
   toast: string | null;
   inspectionMessage: string | null;
   persistentWarning: string | null;
-  clearResult: Readonly<{ reward: number; classification: ClearClassification; tier: number; insightEarned: boolean }> | null;
+  clearResult: Readonly<{ reward: number; classification: ClearClassification; tier: number; insightEarned: boolean; insightReward: number }> | null;
   settingsOpen: boolean;
   statsOpen: boolean;
   prestigeOpen: boolean;
@@ -155,6 +159,7 @@ type Action =
   | Readonly<{ type: "set-hide-purchased-upgrades"; value: boolean }>
   | Readonly<{ type: "set-solver-lane-min-session-ms"; value: number }>
   | Readonly<{ type: "set-solver-lane-preview-update-ms"; value: number }>
+  | Readonly<{ type: "set-ui-scale"; value: number }>
   | Readonly<{ type: "set-tutorial-open"; value: boolean }>
   | Readonly<{ type: "complete-tutorial" }>
   | Readonly<{ type: "solver-started"; sessionId: SolverSessionId }>
@@ -390,6 +395,7 @@ const COPY = {
     off: "Off",
     highContrast: "High contrast",
     notifications: "Notifications",
+    uiScale: "UI size",
     solverLaneHoldTime: "Solver lane hold",
     solverLaneUpdateInterval: "Solver preview interval",
     exportSave: "Export Save",
@@ -421,7 +427,7 @@ const COPY = {
     lifetimeInsight: "Lifetime Insight",
     prestigeCount: "Prestige count",
     pendingInsight: "Pending Insight",
-    prestigeCondition: "Manual clear Tier 9 to gain Insight +1.",
+    prestigeCondition: "Manual clear Tier 9 to gain Insight +1. EX tiers unlock after your first Prestige and can hold more pending Insight.",
     prestigeResetBody: "Reset Compute, normal upgrades, tier unlocks, current puzzle, and this run's manual clears. Insight and permanent upgrades remain.",
     prestigeConfirmAction: "Prestige reset",
     prestigeNoPending: "No pending Insight yet.",
@@ -448,6 +454,7 @@ const COPY = {
     requiresForcedMove: "Requires Forced Move",
     requiresAutoSolver: "Requires Auto Solver",
     autoSolverLocked: "Auto Solver is locked.",
+    autoSolverTierUnsupported: (tier: string) => `${tier} cannot be automated.`,
     autoSolverManualLocked: (tier: number, count: number, required: number) => `Auto Solver requires ${required} manual clears on Tier ${tier} (${count}/${required}).`,
     discardCurrentPuzzle: "Discard current puzzle?",
     discardConfirmBody: "Placed pieces and current progress will be lost.",
@@ -808,6 +815,42 @@ function upgradeName(copy: AppCopy, id: UpgradeId): string {
   return copy.upgradeNames[id];
 }
 
+function tierConfigFor(tier: number) {
+  return GAME_CONFIG.tiers.find((entry) => entry.id === tier) ?? null;
+}
+
+function tierLabel(copy: AppCopy, tier: number): string {
+  return tierConfigFor(tier)?.label ?? `${copy.tier} ${tier}`;
+}
+
+function isTierVisibleForSave(save: SaveDataV1, tier: number): boolean {
+  const config = tierConfigFor(tier);
+  if (!config) {
+    return false;
+  }
+  return (config.prestigeUnlockCount ?? 0) <= save.prestige.count;
+}
+
+function isTierAvailableForSave(save: SaveDataV1, tier: number): boolean {
+  return isTierVisibleForSave(save, tier) && isTierUnlocked(save.progression.upgradeLevels, tier);
+}
+
+function insightRewardForTier(tier: number): number {
+  return tierConfigFor(tier)?.insightReward ?? (tier === GAME_CONFIG.prestige.requiredTier ? GAME_CONFIG.prestige.manualClearInsight : 0);
+}
+
+function isAutoSolverTierSupported(tier: number): boolean {
+  return tierConfigFor(tier)?.autoSolverAllowed !== false;
+}
+
+function uiScaleLabel(language: SaveDataV1["settings"]["language"]): string {
+  return language === "en" ? "UI size" : "UIサイズ";
+}
+
+function unsupportedAutoTierMessage(language: SaveDataV1["settings"]["language"], label: string): string {
+  return language === "en" ? `${label} cannot be automated.` : `${label} は自動ソルバー対象外です。`;
+}
+
 function prestigeUpgradeName(copy: AppCopy, id: PrestigeUpgradeId): string {
   return copy.prestigeUpgradeNames[id];
 }
@@ -1022,7 +1065,8 @@ function awardClear(state: AppState, board: BoardState, stats?: SolverStats): Ap
         [state.puzzle.definition.tier]: (state.save.run.manualClearsByTier[tierKey] ?? 0) + 1,
       }
     : state.save.run.manualClearsByTier;
-  const insightEarned = classification === "manual" && state.puzzle.definition.tier === GAME_CONFIG.prestige.requiredTier;
+  const insightReward = classification === "manual" ? insightRewardForTier(state.puzzle.definition.tier) : 0;
+  const insightEarned = insightReward > 0;
   const elapsed = Date.now() - state.puzzle.startedAt;
   const fastestManualClearMilliseconds = classification === "manual"
     ? Math.min(state.save.statistics.fastestManualClearMilliseconds ?? elapsed, elapsed)
@@ -1036,7 +1080,7 @@ function awardClear(state: AppState, board: BoardState, stats?: SolverStats): Ap
     prestige: {
       ...state.save.prestige,
       pendingInsight: insightEarned
-        ? Math.max(state.save.prestige.pendingInsight, GAME_CONFIG.prestige.manualClearInsight)
+        ? Math.max(state.save.prestige.pendingInsight, insightReward)
         : state.save.prestige.pendingInsight,
     },
     run: {
@@ -1064,7 +1108,7 @@ function awardClear(state: AppState, board: BoardState, stats?: SolverStats): Ap
     ...state,
     save: nextSave,
     puzzle: { ...state.puzzle, board, cleared: true },
-    clearResult: { reward, classification, tier: state.puzzle.definition.tier, insightEarned },
+    clearResult: { reward, classification, tier: state.puzzle.definition.tier, insightEarned, insightReward },
     toast: null,
   };
 }
@@ -1301,6 +1345,8 @@ function reducer(state: AppState, action: Action): AppState {
       return { ...state, save: { ...state.save, settings: { ...state.save.settings, solverLaneMinSessionMs: normalizeSolverLaneMinSessionMs(action.value) } } };
     case "set-solver-lane-preview-update-ms":
       return { ...state, save: { ...state.save, settings: { ...state.save.settings, solverLanePreviewUpdateMs: normalizeSolverLanePreviewUpdateMs(action.value) } } };
+    case "set-ui-scale":
+      return { ...state, save: { ...state.save, settings: { ...state.save.settings, uiScale: normalizeUiScale(action.value) } } };
     case "set-tutorial-open":
       return { ...state, tutorialOpen: action.value };
     case "complete-tutorial":
@@ -1771,7 +1817,7 @@ function MiniSolverBoard({ run, language, copy }: Readonly<{ run: SolverRun; lan
   return (
     <article className={`solver-run ${isActiveSolverStatus(run.status) ? "active" : "terminal"}`} data-testid="solver-run">
       <div className="solver-run-header">
-        <strong>{copy.tier} {run.puzzle.tier}</strong>
+        <strong>{tierLabel(copy, run.puzzle.tier)}</strong>
         <span>{solverStatusLabel(copy, run.status)}</span>
       </div>
       <div className="solver-run-meta">
@@ -1879,6 +1925,7 @@ export function App() {
   }, [state.save.createdAt, state.save.economy.lifetimeCompute]);
 
   const puzzle = state.puzzle.definition;
+  const visibleTiers = useMemo(() => GAME_CONFIG.tiers.filter((tier) => isTierVisibleForSave(state.save, tier.id)), [state.save]);
   const measuredBoardCellSize = useMemo(
     () => boardCellSize(boardViewportSize, puzzle.width, puzzle.height, puzzle.tier),
     [boardViewportSize, puzzle.height, puzzle.tier, puzzle.width],
@@ -1936,8 +1983,13 @@ export function App() {
     : [];
   const manualClearsAutoTier = manualClearsForTier(state.save.run.manualClearsByTier, state.solver.autoTier);
   const autoSolverRequiredManualClears = GAME_CONFIG.solver.manualClearsRequiredByTierForAutoSolver;
-  const autoSolverReady = isAutoSolverReady(state.save.progression.upgradeLevels, state.save.run.manualClearsByTier, state.solver.autoTier);
-  const autoSolverLockMessage = (state.save.progression.upgradeLevels["auto-solver"] ?? 0) <= 0
+  const autoSolverTierSupported = isAutoSolverTierSupported(state.solver.autoTier);
+  const selectedTierAutoSolverSupported = isAutoSolverTierSupported(state.save.progression.selectedTier);
+  const autoSolverReady = autoSolverTierSupported
+    && isAutoSolverReady(state.save.progression.upgradeLevels, state.save.run.manualClearsByTier, state.solver.autoTier);
+  const autoSolverLockMessage = !autoSolverTierSupported
+    ? unsupportedAutoTierMessage(language, tierLabel(copy, state.solver.autoTier))
+    : (state.save.progression.upgradeLevels["auto-solver"] ?? 0) <= 0
     ? copy.autoSolverLocked
     : copy.autoSolverManualLocked(state.solver.autoTier, manualClearsAutoTier, autoSolverRequiredManualClears);
   const activeSolverRunCount = state.solver.runs.filter((run) => isActiveSolverStatus(run.status)).length;
@@ -2029,11 +2081,16 @@ export function App() {
   }, [autoSolverReady, solverLaneCapacity, startSolverRuns, state.solver.autoNext, state.solver.autoTier]);
 
   useEffect(() => {
-    if (state.solver.autoNext || activeSolverRunCount > 0 || state.solver.autoTier === state.save.progression.selectedTier) {
+    if (
+      state.solver.autoNext
+      || activeSolverRunCount > 0
+      || state.solver.autoTier === state.save.progression.selectedTier
+      || !selectedTierAutoSolverSupported
+    ) {
       return;
     }
     dispatch({ type: "set-auto-tier", tier: state.save.progression.selectedTier });
-  }, [activeSolverRunCount, state.save.progression.selectedTier, state.solver.autoNext, state.solver.autoTier]);
+  }, [activeSolverRunCount, selectedTierAutoSolverSupported, state.save.progression.selectedTier, state.solver.autoNext, state.solver.autoTier]);
 
   const startSolver = () => {
     if (!autoSolverReady) {
@@ -2117,7 +2174,7 @@ export function App() {
   };
 
   const switchTier = (tier: number, timestamp: number) => {
-    if (!isTierUnlocked(state.save.progression.upgradeLevels, tier)) {
+    if (!isTierAvailableForSave(state.save, tier)) {
       return;
     }
     if (state.save.progression.selectedTier === tier && puzzle.tier === tier) {
@@ -2291,6 +2348,7 @@ export function App() {
 
   const theme = state.save.settings.theme ?? "system";
   const appClassName = ["app", state.save.settings.highContrast ? "high-contrast" : "", theme === "dark" ? "dark" : "", theme === "light" ? "light" : ""].filter(Boolean).join(" ");
+  const appStyle = { "--ui-scale": state.save.settings.uiScale } as React.CSSProperties;
   const prestigeVisible = (state.save.progression.upgradeLevels["tier-9"] ?? 0) > 0
     || state.save.prestige.count > 0
     || state.save.prestige.insight > 0
@@ -2301,7 +2359,7 @@ export function App() {
     : copy.prestige;
 
   return (
-    <main className={appClassName}>
+    <main className={appClassName} style={appStyle}>
       <header className="topbar">
         <h1>puzzle_incremental</h1>
         <div className="topbar-prestige">
@@ -2395,21 +2453,21 @@ export function App() {
           <section className="panel puzzle-panel">
             <div className="board-top">
               <div className="board-header">
-                <span>{copy.tier} {puzzle.tier}</span>
+                <span>{tierLabel(copy, puzzle.tier)}</span>
                 <button type="button" onClick={() => navigator.clipboard?.writeText(puzzle.seed)}>{copy.seed}: {puzzle.seed}</button>
                 <span>{copy.difficulty} {puzzle.difficulty.score}</span>
                 <span>{classificationLabel(copy, state.puzzle.classification)}</span>
               </div>
               <div className="tier-switcher" aria-label={copy.tierSelection}>
-                {GAME_CONFIG.tiers.map((tier) => (
+                {visibleTiers.map((tier) => (
                   <button
                     key={tier.id}
                     type="button"
-                    disabled={!isTierUnlocked(state.save.progression.upgradeLevels, tier.id)}
+                    disabled={!isTierAvailableForSave(state.save, tier.id)}
                     className={state.save.progression.selectedTier === tier.id ? "selected" : ""}
                     onClick={() => switchTier(tier.id, Date.now())}
                   >
-                    {copy.tier} {tier.id}
+                    {tierLabel(copy, tier.id)}
                   </button>
                 ))}
               </div>
@@ -2506,7 +2564,7 @@ export function App() {
               <span>{copy.backtracks}</span><strong>{formatNumber(state.solver.stats?.backtracks ?? 0, language)}</strong>
               <span>{copy.theoryNodesPerSecond}</span><strong>{formatNumber(nodesPerSecond(state.save.progression.upgradeLevels, state.save.prestige.upgradeLevels), language)}</strong>
               <span>{copy.depth}</span><strong>{state.solver.stats?.currentDepth ?? 0}</strong>
-              <span>{copy.autoTier}</span><strong>{copy.tier} {state.solver.autoTier}</strong>
+              <span>{copy.autoTier}</span><strong>{tierLabel(copy, state.solver.autoTier)}</strong>
               <span>{copy.parallel}</span><strong>{solverParallelSessions}</strong>
               <span>{copy.manualUnlock}</span><strong>{Math.min(manualClearsAutoTier, autoSolverRequiredManualClears)}/{autoSolverRequiredManualClears}</strong>
               <span>{copy.solverPayout}</span><strong>{solverPayoutMultiplier.toFixed(2)}x</strong>
@@ -2515,7 +2573,14 @@ export function App() {
               <button type="button" onClick={startSolver} disabled={!autoSolverReady || solverLaneCapacity <= 0} title={autoSolverReady ? undefined : autoSolverLockMessage}>{copy.startSolver}</button>
               <button type="button" onClick={pauseOrResumeSolver} disabled={activeSolverRunCount === 0}>{state.solver.status === "paused" ? copy.resume : copy.pause}</button>
               <button type="button" onClick={cancelSolver} disabled={activeSolverRunCount === 0}>{copy.cancel}</button>
-              <button type="button" onClick={() => dispatch({ type: "set-auto-tier", tier: state.save.progression.selectedTier })} disabled={state.solver.autoTier === state.save.progression.selectedTier}>{copy.useCurrentTier}</button>
+              <button
+                type="button"
+                onClick={() => dispatch({ type: "set-auto-tier", tier: state.save.progression.selectedTier })}
+                disabled={state.solver.autoTier === state.save.progression.selectedTier || !selectedTierAutoSolverSupported}
+                title={selectedTierAutoSolverSupported ? undefined : unsupportedAutoTierMessage(language, tierLabel(copy, state.save.progression.selectedTier))}
+              >
+                {copy.useCurrentTier}
+              </button>
               <button
                 type="button"
                 className={state.solver.autoNext ? "selected" : ""}
@@ -2672,8 +2737,8 @@ export function App() {
             <h2>{copy.clear}</h2>
             <p>{copy.clearSummary(classificationLabel(copy, state.clearResult.classification), state.clearResult.reward)}</p>
             <p>{copy.difficulty} {puzzle.difficulty.score}</p>
-            {state.clearResult.tier === GAME_CONFIG.prestige.requiredTier && (
-              <p>{state.clearResult.insightEarned ? copy.prestigeEarned(GAME_CONFIG.prestige.manualClearInsight) : copy.prestigeManualOnly}</p>
+            {insightRewardForTier(state.clearResult.tier) > 0 && (
+              <p>{state.clearResult.insightEarned ? copy.prestigeEarned(state.clearResult.insightReward) : copy.prestigeManualOnly}</p>
             )}
             {state.clearResult.insightEarned && (
               <button
@@ -2715,6 +2780,21 @@ export function App() {
                 <option value="reduced">{copy.reduced}</option>
                 <option value="off">{copy.off}</option>
               </select>
+            </label>
+            <label className="setting-field setting-range-field">
+              <span className="setting-range-header">
+                <span>{uiScaleLabel(language)}</span>
+                <strong>{Math.round(state.save.settings.uiScale * 100)}%</strong>
+              </span>
+              <input
+                aria-label={uiScaleLabel(language)}
+                type="range"
+                min={UI_SCALE_MIN}
+                max={UI_SCALE_MAX}
+                step={UI_SCALE_STEP}
+                value={state.save.settings.uiScale}
+                onChange={(event) => dispatch({ type: "set-ui-scale", value: Number(event.target.value) })}
+              />
             </label>
             <label className="setting-field setting-range-field">
               <span className="setting-range-header">

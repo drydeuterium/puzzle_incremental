@@ -57,6 +57,7 @@ describe("save repository", () => {
     expect(loaded.save.settings.hidePurchasedUpgrades).toBe(true);
     expect(loaded.save.settings.solverLaneMinSessionMs).toBe(1000);
     expect(loaded.save.settings.solverLanePreviewUpdateMs).toBe(250);
+    expect(loaded.save.settings.uiScale).toBe(1);
     expect(loaded.save.statistics.manualClearsByTier).toEqual({ 0: 2, 1: 1 });
     expect(loaded.save.run.manualClearsByTier).toEqual({ 0: 2, 1: 1 });
     expect(loaded.save.run.clearsByTier).toEqual({});

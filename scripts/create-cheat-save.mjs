@@ -90,6 +90,7 @@ const save = {
     hidePurchasedUpgrades: false,
     solverLaneMinSessionMs: 1000,
     solverLanePreviewUpdateMs: 250,
+    uiScale: 1,
   },
 };
 

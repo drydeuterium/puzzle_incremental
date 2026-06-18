@@ -155,6 +155,7 @@ export type UserSettings = Readonly<{
   hidePurchasedUpgrades: boolean;
   solverLaneMinSessionMs: number;
   solverLanePreviewUpdateMs: number;
+  uiScale: number;
 }>;
 
 export type Statistics = Readonly<{

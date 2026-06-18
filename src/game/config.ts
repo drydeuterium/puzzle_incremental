@@ -8,6 +8,7 @@ export type ShapeConfig = Readonly<{
 
 export type TierConfig = Readonly<{
   id: number;
+  label?: string;
   width: number;
   height: number;
   pieceCount: number;
@@ -16,6 +17,9 @@ export type TierConfig = Readonly<{
   difficultyScoreMin: number;
   difficultyScoreMax: number;
   unlockUpgradeId: UpgradeId | null;
+  prestigeUnlockCount?: number;
+  autoSolverAllowed?: boolean;
+  insightReward?: number;
 }>;
 
 export type UpgradeConfig = Readonly<{
@@ -54,7 +58,7 @@ function makeTier(input: TierInput): TierConfig {
 }
 
 export const GAME_CONFIG = {
-  gameConfigVersion: "1.7.0-prestige-v1",
+  gameConfigVersion: "1.8.0-ex-tiers-ui-scale",
   generatorVersion: 6,
   currency: {
     name: "Compute",
@@ -114,6 +118,34 @@ export const GAME_CONFIG = {
     makeTier({ id: 7, width: 9, height: 7, pieceCount: 11, shape: "jagged", difficultyScoreMin: 130, difficultyScoreMax: 800, unlockUpgradeId: "tier-7" }),
     makeTier({ id: 8, width: 8, height: 8, pieceCount: 12, shape: "jagged", difficultyScoreMin: 150, difficultyScoreMax: 920, unlockUpgradeId: "tier-8" }),
     makeTier({ id: 9, width: 10, height: 9, pieceCount: 16, shape: "jagged", difficultyScoreMin: 190, difficultyScoreMax: 1200, unlockUpgradeId: "tier-9" }),
+    makeTier({
+      id: 10,
+      label: "Tier EX-1",
+      width: 12,
+      height: 8,
+      pieceCount: 18,
+      shape: "jagged",
+      difficultyScoreMin: 260,
+      difficultyScoreMax: 1600,
+      unlockUpgradeId: null,
+      prestigeUnlockCount: 1,
+      autoSolverAllowed: false,
+      insightReward: 2,
+    }),
+    makeTier({
+      id: 11,
+      label: "Tier EX-2",
+      width: 14,
+      height: 8,
+      pieceCount: 20,
+      shape: "jagged",
+      difficultyScoreMin: 340,
+      difficultyScoreMax: 2200,
+      unlockUpgradeId: null,
+      prestigeUnlockCount: 1,
+      autoSolverAllowed: false,
+      insightReward: 4,
+    }),
   ] satisfies readonly TierConfig[],
   upgrades: [
     { id: "placement-scanner", name: "Placement Scanner", maxLevel: 1, basePrice: 120, priceMultiplier: 1, prerequisites: [] },

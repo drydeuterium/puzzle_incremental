@@ -243,6 +243,63 @@ function seedPrestigeReadySave(): void {
   window.localStorage.setItem(BACKUP_SAVE_KEY, JSON.stringify(save));
 }
 
+function seedExTierClearPuzzle(): void {
+  const now = new Date("2026-01-01T00:00:00.000Z");
+  const base = createInitialSave(now);
+  const save = {
+    ...base,
+    settings: { ...base.settings, language: "en", tutorialCompleted: true },
+    progression: {
+      ...base.progression,
+      selectedTier: 10,
+      upgradeLevels: {
+        ...base.progression.upgradeLevels,
+        "auto-solver": 1,
+        "tier-1": 1,
+        "tier-2": 1,
+        "tier-3": 1,
+        "tier-4": 1,
+        "tier-5": 1,
+        "tier-6": 1,
+        "tier-7": 1,
+        "tier-8": 1,
+        "tier-9": 1,
+      },
+    },
+    prestige: {
+      ...base.prestige,
+      count: 1,
+    },
+    run: {
+      ...base.run,
+      manualClearsByTier: { 0: 5, 10: 5 },
+      highestTier: 10,
+    },
+    currentPuzzle: {
+      definition: {
+        id: "ex-tier-clear-fixture",
+        generatorVersion: GAME_CONFIG.generatorVersion,
+        tier: 10,
+        seed: "ex-tier-clear-fixture",
+        width: 2,
+        height: 2,
+        usableCellIndices: [0, 1, 2, 3],
+        blockedCellIndices: [],
+        pieces: [{ id: "p0", type: "O" }],
+        difficulty: { score: 1600, solutionNodes: 1, backtracks: 0, maxDepth: 1, forcedRatio: 1, initialBranching: 1, capped: false },
+        constructionSolution: [{ pieceId: "p0", pieceType: "O", orientationIndex: 0, anchor: { x: 0, y: 0 }, cellIndices: [0, 1, 2, 3] }],
+      },
+      placements: [],
+      classification: "manual",
+      startedAt: now.toISOString(),
+      elapsedMilliseconds: 0,
+      cleared: false,
+    },
+  };
+  window.localStorage.setItem(SAVE_KEY, JSON.stringify(save));
+  window.localStorage.setItem(BACKUP_SAVE_KEY, JSON.stringify(save));
+}
+
 function seedUnsortedPiecePuzzle(): void {
   const now = new Date("2026-01-01T00:00:00.000Z");
   const base = createInitialSave(now);
@@ -410,13 +467,15 @@ describe("App", () => {
     expect(screen.getByTestId("piece-p0")).toHaveTextContent("回転");
   });
 
-  it("renders tier selection through Tier 9", async () => {
+  it("renders tier selection through Tier 9 before prestige", async () => {
     const user = userEvent.setup();
     render(<App />);
     await user.click(screen.getByRole("button", { name: "始める" }));
 
     expect(screen.getByRole("button", { name: "Tier 0" })).toBeEnabled();
     expect(screen.getByRole("button", { name: "Tier 9" })).toBeDisabled();
+    expect(screen.queryByRole("button", { name: "Tier EX-1" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Tier EX-2" })).not.toBeInTheDocument();
   });
 
   it("rotates the selected piece with arrow keys and A/D", async () => {
@@ -640,18 +699,23 @@ describe("App", () => {
     render(<App />);
 
     await user.click(screen.getByText("Settings"));
+    expect(screen.getByLabelText("UI size")).toHaveValue("1");
     expect(screen.getByLabelText("Solver lane hold")).toHaveValue("1000");
     expect(screen.getByLabelText("Solver preview interval")).toHaveValue("250");
 
+    fireEvent.change(screen.getByLabelText("UI size"), { target: { value: "0.9" } });
     fireEvent.change(screen.getByLabelText("Solver lane hold"), { target: { value: "2350" } });
     fireEvent.change(screen.getByLabelText("Solver preview interval"), { target: { value: "725" } });
 
+    expect(screen.getByLabelText("UI size")).toHaveValue("0.9");
     expect(screen.getByLabelText("Solver lane hold")).toHaveValue("2350");
     expect(screen.getByLabelText("Solver preview interval")).toHaveValue("725");
+    expect(screen.getByText("90%")).toBeInTheDocument();
     expect(screen.getByText("2350ms")).toBeInTheDocument();
     expect(screen.getByText("725ms")).toBeInTheDocument();
     await waitFor(() => {
       const saved = JSON.parse(window.localStorage.getItem(SAVE_KEY) ?? "{}");
+      expect(saved.settings.uiScale).toBe(0.9);
       expect(saved.settings.solverLaneMinSessionMs).toBe(2350);
       expect(saved.settings.solverLanePreviewUpdateMs).toBe(725);
     });
@@ -725,6 +789,33 @@ describe("App", () => {
     const rewardCard = within(dialog).getByText("Reward Analysis").closest("article") as HTMLElement;
     expect(rewardCard).toHaveTextContent("1 Insight, not enough Insight");
     expect(within(rewardCard).getByRole("button", { name: "Buy" })).toBeDisabled();
+  });
+
+  it("reveals EX tiers after prestige and keeps them manual-only", async () => {
+    seedPrestigeReadySave();
+    const user = userEvent.setup();
+    render(<App />);
+
+    expect(screen.getByRole("button", { name: "Tier EX-1" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Tier EX-2" })).toBeEnabled();
+    await user.click(screen.getByRole("button", { name: "Tier EX-1" }));
+
+    expect(screen.getAllByText("Tier EX-1").length).toBeGreaterThan(1);
+    expect(screen.getByRole("button", { name: "Start Solver" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Use current tier" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Use current tier" })).toHaveAttribute("title", "Tier EX-1 cannot be automated.");
+    expect(screen.getByRole("button", { name: "Auto next: Off" })).toBeDisabled();
+  });
+
+  it("grants larger pending Insight for manual EX clears", async () => {
+    seedExTierClearPuzzle();
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.click(screen.getByTestId("piece-p0"));
+    await user.click(screen.getByTestId("cell-0"));
+
+    expect(screen.getByRole("dialog")).toHaveTextContent("Insight +2 is pending.");
   });
 
   it("marks Tier 9 manual clears as pending Insight and opens the prestige modal from clear", async () => {

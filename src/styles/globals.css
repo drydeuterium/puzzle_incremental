@@ -53,11 +53,15 @@ button:disabled {
 }
 
 .app {
+  --ui-scale: 1;
   display: flex;
   flex-direction: column;
-  height: 100%;
+  width: calc(100% / var(--ui-scale));
+  height: calc(100% / var(--ui-scale));
   min-height: 0;
   overflow: hidden;
+  transform: scale(var(--ui-scale));
+  transform-origin: top left;
 }
 
 .topbar {
@@ -949,8 +953,9 @@ button:disabled {
   }
 
   .app {
+    width: calc(100% / var(--ui-scale));
     height: auto;
-    min-height: 100vh;
+    min-height: calc(100vh / var(--ui-scale));
     overflow: visible;
   }
 
