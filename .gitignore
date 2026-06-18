@@ -4,6 +4,7 @@ coverage/
 test-results/
 playwright-report/
 codex/cheat-save.json
+codex/AGENT_NOTES.local.md
 .env
 .env.*
 *.tsbuildinfo
