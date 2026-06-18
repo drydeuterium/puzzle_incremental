@@ -767,11 +767,11 @@ describe("App", () => {
     expect(within(tierOneCard).getByRole("button", { name: "Buy" })).toBeEnabled();
   });
 
-  it("hides the topbar prestige button until the prestige system is unlocked", () => {
+  it("hides topbar prestige controls until the prestige system is unlocked", () => {
     seedTwoPiecePuzzle();
     render(<App />);
 
-    expect(screen.getByTestId("insight")).toHaveTextContent("0");
+    expect(screen.queryByTestId("insight")).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Prestige" })).not.toBeInTheDocument();
   });
 

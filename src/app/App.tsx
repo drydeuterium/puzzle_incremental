@@ -2373,7 +2373,9 @@ export function App() {
           <div className="metric"><span>{copy.compute}</span><strong data-testid="compute">{formatNumber(state.save.economy.compute, language)} C</strong></div>
           <div className="metric"><span>{copy.computePerSecond}</span><strong data-testid="compute-per-second">{formatRate(computePerSecond, language)}</strong></div>
           <div className="metric"><span>{copy.nodesPerSecond}</span><strong>{formatNumber(state.solver.stats?.measuredNodesPerSecond ?? 0, language)}</strong></div>
-          <div className="metric"><span>{copy.insight}</span><strong data-testid="insight">{formatNumber(state.save.prestige.insight, language)}</strong></div>
+          {prestigeVisible && (
+            <div className="metric"><span>{copy.insight}</span><strong data-testid="insight">{formatNumber(state.save.prestige.insight, language)}</strong></div>
+          )}
           <button type="button" onClick={() => dispatch({ type: "set-tutorial-open", value: true })}>{copy.tutorial}</button>
           <button type="button" onClick={() => dispatch({ type: "set-settings-open", value: true })}>{copy.settings}</button>
           <button type="button" onClick={() => dispatch({ type: "set-stats-open", value: true })}>{copy.stats}</button>
