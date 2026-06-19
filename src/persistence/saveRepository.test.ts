@@ -48,6 +48,7 @@ describe("save repository", () => {
       },
     };
     delete (legacySave as Record<string, unknown>).prestige;
+    delete (legacySave as Record<string, unknown>).challenge;
     delete (legacySave as Record<string, unknown>).run;
     storage.setItem("puzzle_incremental.save.v1", JSON.stringify(legacySave));
     const loaded = loadSave(storage);
@@ -66,6 +67,10 @@ describe("save repository", () => {
     expect(loaded.save.prestige.pendingInsight).toBe(0);
     expect(loaded.save.prestige.upgradeLevels["reward-analysis"]).toBe(0);
     expect(loaded.save.prestige.upgradeLevels["tier-compression"]).toBe(0);
+    expect(loaded.save.challenge.seals).toBe(0);
+    expect(loaded.save.challenge.completions["manual-only"]).toBe(0);
+    expect(loaded.save.challenge.upgradeLevels["insight-ladder"]).toBe(0);
+    expect(loaded.save.run.activeChallengeId).toBeNull();
     expect(loaded.save.progression.upgradeLevels["tier-6"]).toBe(0);
     expect(loaded.save.progression.upgradeLevels["tier-9"]).toBe(0);
   });

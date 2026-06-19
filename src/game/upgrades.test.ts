@@ -67,6 +67,7 @@ describe("upgrades", () => {
     expect(nodesPerSecond(levels)).toBe(2);
     expect(isAutoSolverReady(levels, { 0: 4 }, 0)).toBe(false);
     expect(isAutoSolverReady(levels, { 0: 5 }, 0)).toBe(true);
+    expect(isAutoSolverReady(levels, { 0: 2 }, 0, 2)).toBe(true);
   });
 
   it("applies prestige solver foundation before throughput multipliers", () => {
@@ -79,6 +80,12 @@ describe("upgrades", () => {
     const prestigeLevels = { ...initialPrestigeUpgradeState(), "tier-compression": 2 };
     expect(getUpgradePrice("tier-1", 0, prestigeLevels)).toBe(315);
     expect(getUpgradePrice("placement-scanner", 0, prestigeLevels)).toBe(120);
+  });
+
+  it("applies expensive tier challenge only to tier unlock prices", () => {
+    const prestigeLevels = initialPrestigeUpgradeState();
+    expect(getUpgradePrice("tier-1", 0, prestigeLevels, "expensive-tiers")).toBe(525);
+    expect(getUpgradePrice("placement-scanner", 0, prestigeLevels, "expensive-tiers")).toBe(120);
   });
 
   it("starts automated rewards at 0.1x and improves them with solver payout", () => {

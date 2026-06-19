@@ -83,12 +83,24 @@ button:disabled {
 
 .topbar-prestige {
   display: flex;
+  gap: 8px;
+  align-items: center;
   justify-content: center;
   min-width: 0;
 }
 
 .topbar-prestige button {
   min-width: 132px;
+}
+
+.challenge-badge {
+  padding: 5px 8px;
+  border: 1px solid color-mix(in srgb, var(--accent) 45%, var(--line));
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--accent) 10%, var(--surface));
+  font-size: 12px;
+  font-weight: 800;
+  white-space: nowrap;
 }
 
 .topbar-actions {
@@ -212,6 +224,7 @@ button:disabled {
 .tier-switcher .selected,
 .toggle-button.selected,
 .upgrade-tab.selected,
+.prestige-tabs .selected,
 .solver-controls .selected {
   border-color: var(--accent);
   box-shadow: inset 0 0 0 2px var(--accent);
@@ -722,6 +735,22 @@ button:disabled {
   max-height: min(860px, calc(100vh - 32px));
 }
 
+.prestige-tabs {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.prestige-tabs button {
+  min-height: 32px;
+}
+
+.prestige-tab-panel {
+  display: grid;
+  gap: 10px;
+  min-height: 0;
+}
+
 .prestige-summary {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -736,6 +765,11 @@ button:disabled {
 }
 
 .prestige-upgrade-list {
+  display: grid;
+  gap: 8px;
+}
+
+.challenge-list {
   display: grid;
   gap: 8px;
 }

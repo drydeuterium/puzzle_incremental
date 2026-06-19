@@ -7,9 +7,10 @@ import {
   normalizeSolverLanePreviewUpdateMs,
   normalizeUiScale,
 } from "../game/settings";
+import { CHALLENGES, createInitialChallengeState, initialChallengeUpgradeState } from "../game/challenges";
 import { createInitialPrestigeState, initialPrestigeUpgradeState } from "../game/prestige";
 import { initialUpgradeState } from "../game/upgrades";
-import type { PrestigeState, PrestigeUpgradeState, RunState, SaveDataV1, Statistics, UpgradeState, UserSettings } from "../core/types";
+import type { ChallengeId, ChallengeState, ChallengeUpgradeState, PrestigeState, PrestigeUpgradeState, RunState, SaveDataV1, Statistics, UpgradeState, UserSettings } from "../core/types";
 
 export const SAVE_KEY = "puzzle_incremental.save.v1";
 export const BACKUP_SAVE_KEY = "puzzle_incremental.save.backup";
@@ -50,12 +51,13 @@ export function createInitialStatistics(nowIso: string): Statistics {
   };
 }
 
-export function createInitialRunState(nowIso: string): RunState {
+export function createInitialRunState(nowIso: string, activeChallengeId: ChallengeId | null = null): RunState {
   return {
     startedAt: nowIso,
     manualClearsByTier: {},
     clearsByTier: {},
     highestTier: 0,
+    activeChallengeId,
   };
 }
 
@@ -77,6 +79,7 @@ export function createInitialSave(now = new Date()): SaveDataV1 {
       autoSeedCounters: {},
     },
     prestige: createInitialPrestigeState(),
+    challenge: createInitialChallengeState(),
     run: createInitialRunState(iso),
     currentPuzzle: null,
     statistics: createInitialStatistics(iso),
@@ -131,6 +134,39 @@ function normalizePrestigeUpgradeState(value: Record<string, unknown>): Prestige
   ) as PrestigeUpgradeState;
 }
 
+function isChallengeId(value: unknown): value is ChallengeId {
+  return typeof value === "string" && CHALLENGES.some((challenge) => challenge.id === value);
+}
+
+function normalizeChallengeUpgradeState(value: Record<string, unknown>): ChallengeUpgradeState {
+  const defaults = initialChallengeUpgradeState();
+  return Object.fromEntries(
+    Object.entries(defaults).map(([upgradeId, defaultLevel]) => [
+      upgradeId,
+      isSafeNonNegativeInteger(value[upgradeId]) ? value[upgradeId] : defaultLevel,
+    ]),
+  ) as ChallengeUpgradeState;
+}
+
+function normalizeChallengeState(value: unknown): ChallengeState {
+  const defaults = createInitialChallengeState();
+  if (!isRecord(value)) {
+    return defaults;
+  }
+  const rawCompletions = isRecord(value.completions) ? value.completions : {};
+  return {
+    seals: isSafeNonNegativeInteger(value.seals) ? value.seals : defaults.seals,
+    lifetimeSeals: isSafeNonNegativeInteger(value.lifetimeSeals) ? value.lifetimeSeals : defaults.lifetimeSeals,
+    completions: Object.fromEntries(
+      Object.keys(defaults.completions).map((challengeId) => [
+        challengeId,
+        isSafeNonNegativeInteger(rawCompletions[challengeId]) ? rawCompletions[challengeId] : defaults.completions[challengeId as ChallengeId],
+      ]),
+    ) as Readonly<Record<ChallengeId, number>>,
+    upgradeLevels: isRecord(value.upgradeLevels) ? normalizeChallengeUpgradeState(value.upgradeLevels) : defaults.upgradeLevels,
+  };
+}
+
 function normalizePrestigeState(value: unknown): PrestigeState {
   const defaults = createInitialPrestigeState();
   if (!isRecord(value)) {
@@ -164,6 +200,7 @@ function normalizeRunState(value: unknown, fallbackStartedAt: string, legacyManu
     manualClearsByTier: isRecord(value.manualClearsByTier) ? normalizeCountRecord(value.manualClearsByTier) : legacyManualClearsByTier,
     clearsByTier: isRecord(value.clearsByTier) ? normalizeCountRecord(value.clearsByTier) : defaults.clearsByTier,
     highestTier: isSafeNonNegativeInteger(value.highestTier) ? value.highestTier : defaults.highestTier,
+    activeChallengeId: isChallengeId(value.activeChallengeId) ? value.activeChallengeId : defaults.activeChallengeId,
   };
 }
 
@@ -198,6 +235,7 @@ export function validateSaveData(value: unknown): SaveDataV1 | null {
       upgradeLevels: normalizeUpgradeState(progression.upgradeLevels),
     },
     prestige: normalizePrestigeState(value.prestige),
+    challenge: normalizeChallengeState(value.challenge),
     run: normalizeRunState(value.run, fallbackStartedAt, normalizedManualClearsByTier),
     statistics: {
       ...(value as SaveDataV1).statistics,

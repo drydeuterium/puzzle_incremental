@@ -58,7 +58,7 @@ function makeTier(input: TierInput): TierConfig {
 }
 
 export const GAME_CONFIG = {
-  gameConfigVersion: "1.8.1-larger-ex-tiers",
+  gameConfigVersion: "1.9.0-challenge-seals",
   generatorVersion: 7,
   currency: {
     name: "Compute",

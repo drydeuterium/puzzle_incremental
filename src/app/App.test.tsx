@@ -243,6 +243,83 @@ function seedPrestigeReadySave(): void {
   window.localStorage.setItem(BACKUP_SAVE_KEY, JSON.stringify(save));
 }
 
+function seedChallengeReadySave(seals = 0): void {
+  const now = new Date("2026-01-01T00:00:00.000Z");
+  const base = createInitialSave(now);
+  const save = {
+    ...base,
+    settings: { ...base.settings, language: "en", tutorialCompleted: true },
+    prestige: {
+      ...base.prestige,
+      count: 1,
+    },
+    challenge: {
+      ...base.challenge,
+      seals,
+      lifetimeSeals: seals,
+    },
+  };
+  window.localStorage.setItem(SAVE_KEY, JSON.stringify(save));
+  window.localStorage.setItem(BACKUP_SAVE_KEY, JSON.stringify(save));
+}
+
+function seedChallengeTierNineClearPuzzle(): void {
+  const now = new Date("2026-01-01T00:00:00.000Z");
+  const base = createInitialSave(now);
+  const save = {
+    ...base,
+    settings: { ...base.settings, language: "en", tutorialCompleted: true },
+    progression: {
+      ...base.progression,
+      selectedTier: 9,
+      upgradeLevels: {
+        ...base.progression.upgradeLevels,
+        "tier-1": 1,
+        "tier-2": 1,
+        "tier-3": 1,
+        "tier-4": 1,
+        "tier-5": 1,
+        "tier-6": 1,
+        "tier-7": 1,
+        "tier-8": 1,
+        "tier-9": 1,
+      },
+    },
+    prestige: {
+      ...base.prestige,
+      count: 1,
+    },
+    run: {
+      ...base.run,
+      activeChallengeId: "low-reward" as const,
+      manualClearsByTier: { 8: 1 },
+      highestTier: 9,
+    },
+    currentPuzzle: {
+      definition: {
+        id: "challenge-tier-nine-clear-fixture",
+        generatorVersion: GAME_CONFIG.generatorVersion,
+        tier: 9,
+        seed: "challenge-tier-nine-clear-fixture",
+        width: 2,
+        height: 2,
+        usableCellIndices: [0, 1, 2, 3],
+        blockedCellIndices: [],
+        pieces: [{ id: "p0", type: "O" }],
+        difficulty: { score: 1200, solutionNodes: 1, backtracks: 0, maxDepth: 1, forcedRatio: 1, initialBranching: 1, capped: false },
+        constructionSolution: [{ pieceId: "p0", pieceType: "O", orientationIndex: 0, anchor: { x: 0, y: 0 }, cellIndices: [0, 1, 2, 3] }],
+      },
+      placements: [],
+      classification: "manual",
+      startedAt: now.toISOString(),
+      elapsedMilliseconds: 0,
+      cleared: false,
+    },
+  };
+  window.localStorage.setItem(SAVE_KEY, JSON.stringify(save));
+  window.localStorage.setItem(BACKUP_SAVE_KEY, JSON.stringify(save));
+}
+
 function seedExTierClearPuzzle(): void {
   const now = new Date("2026-01-01T00:00:00.000Z");
   const base = createInitialSave(now);
@@ -791,7 +868,8 @@ describe("App", () => {
     await user.click(screen.getByRole("button", { name: "Prestige" }));
 
     const dialog = screen.getByRole("dialog");
-    expect(dialog).toHaveTextContent("Manual clear Tier 9 to gain Insight +1.");
+    expect(dialog).toHaveTextContent("Manual clear Tier 9 to gain Insight.");
+    await user.click(within(dialog).getByRole("tab", { name: "Permanent" }));
     expect(dialog).toHaveTextContent("Permanent upgrades");
     const rewardCard = within(dialog).getByText("Reward Analysis").closest("article") as HTMLElement;
     expect(rewardCard).toHaveTextContent("1 Insight, not enough Insight");
@@ -848,7 +926,7 @@ describe("App", () => {
     await user.click(screen.getByRole("button", { name: "Forced Move" }));
 
     const dialog = screen.getByRole("dialog");
-    expect(dialog).toHaveTextContent("Insight is earned only from manual Tier 9 clears.");
+    expect(dialog).toHaveTextContent("This clear does not currently generate Insight.");
     expect(within(dialog).queryByRole("button", { name: "Prestige" })).not.toBeInTheDocument();
   });
 
@@ -868,9 +946,60 @@ describe("App", () => {
     expect(screen.getByText("Placement Scanner")).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "Prestige" }));
+    await user.click(screen.getByRole("tab", { name: "Permanent" }));
     const rewardCard = screen.getByText("Reward Analysis").closest("article") as HTMLElement;
     expect(rewardCard).toHaveTextContent("Level 1/10");
+    await user.click(screen.getByRole("tab", { name: "Overview" }));
     expect(screen.getByText("No pending Insight yet.")).toBeInTheDocument();
+  });
+
+  it("shows challenge tab after prestige and purchases seal upgrades", async () => {
+    seedChallengeReadySave(3);
+    const user = userEvent.setup();
+    render(<App />);
+
+    expect(screen.getByTestId("seal")).toHaveTextContent("3");
+    await user.click(screen.getByRole("button", { name: "Prestige" }));
+    const dialog = screen.getByRole("dialog");
+    await user.click(within(dialog).getByRole("tab", { name: "Challenge" }));
+
+    expect(dialog).toHaveTextContent("Manual Circuit");
+    expect(dialog).toHaveTextContent("Seal Upgrades");
+    const ladderCard = within(dialog).getByText("Insight Ladder").closest("article") as HTMLElement;
+    expect(ladderCard).toHaveTextContent("Insight starts at Tier 9");
+    await user.click(within(ladderCard).getByRole("button", { name: "Buy" }));
+
+    expect(ladderCard).toHaveTextContent("Level 1/8");
+    expect(ladderCard).toHaveTextContent("Insight starts at Tier 8");
+  });
+
+  it("starts a challenge run from the challenge tab", async () => {
+    seedChallengeReadySave();
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.click(screen.getByRole("button", { name: "Prestige" }));
+    const dialog = screen.getByRole("dialog");
+    await user.click(within(dialog).getByRole("tab", { name: "Challenge" }));
+    const manualCard = within(dialog).getByText("Manual Circuit").closest("article") as HTMLElement;
+    await user.click(within(manualCard).getByRole("button", { name: "Start Challenge" }));
+    await user.click(screen.getByRole("button", { name: "Start Challenge" }));
+
+    expect(screen.getByText("Challenge: Manual Circuit")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Start Solver" })).toBeDisabled();
+  });
+
+  it("awards seal when the active challenge is manually completed", async () => {
+    seedChallengeTierNineClearPuzzle();
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.click(screen.getByTestId("piece-p0"));
+    await user.click(screen.getByTestId("cell-0"));
+
+    const dialog = screen.getByRole("dialog");
+    expect(dialog).toHaveTextContent("Insight +1 is pending.");
+    expect(dialog).toHaveTextContent("Low Reward Run complete. Seal +3.");
   });
 
   it("groups upgrades into tabs and sorts the default tab by lowest price", async () => {

@@ -1,6 +1,7 @@
 import { GAME_CONFIG } from "./config";
+import { challengeTierPriceMultiplier } from "./challenges";
 import { solverFoundationBonus, tierCompressionDiscount } from "./prestige";
-import type { PrestigeUpgradeState, SolverOptions, UpgradeId, UpgradeState } from "../core/types";
+import type { ChallengeId, PrestigeUpgradeState, SolverOptions, UpgradeId, UpgradeState } from "../core/types";
 
 export type PurchaseOutcome = Readonly<
   | { ok: true; price: number }
@@ -31,13 +32,14 @@ function requiredManualClearTier(id: UpgradeId): number | null {
   return Number(match[1]) - 1;
 }
 
-export function getUpgradePrice(id: UpgradeId, level: number, prestigeLevels?: PrestigeUpgradeState): number {
+export function getUpgradePrice(id: UpgradeId, level: number, prestigeLevels?: PrestigeUpgradeState, activeChallengeId: ChallengeId | null = null): number {
   const upgrade = getUpgradeConfig(id);
   const basePrice = Math.floor(upgrade.basePrice * upgrade.priceMultiplier ** level);
-  if (!prestigeLevels || !isTierUpgradeId(id)) {
+  if (!isTierUpgradeId(id)) {
     return basePrice;
   }
-  return Math.max(1, Math.floor(basePrice * (1 - tierCompressionDiscount(prestigeLevels))));
+  const prestigeMultiplier = prestigeLevels ? 1 - tierCompressionDiscount(prestigeLevels) : 1;
+  return Math.max(1, Math.floor(basePrice * prestigeMultiplier * challengeTierPriceMultiplier(activeChallengeId)));
 }
 
 export function canPurchaseUpgrade(
@@ -46,10 +48,11 @@ export function canPurchaseUpgrade(
   id: UpgradeId,
   manualClearsByTier: Readonly<Record<string, number>> = {},
   prestigeLevels?: PrestigeUpgradeState,
+  activeChallengeId: ChallengeId | null = null,
 ): PurchaseOutcome {
   const upgrade = getUpgradeConfig(id);
   const level = levels[id] ?? 0;
-  const price = getUpgradePrice(id, level, prestigeLevels);
+  const price = getUpgradePrice(id, level, prestigeLevels, activeChallengeId);
   if (level >= upgrade.maxLevel) {
     return { ok: false, reason: "maximum-level", price };
   }
@@ -93,9 +96,14 @@ export function manualClearsForTier(manualClearsByTier: Readonly<Record<string, 
   return manualClearsByTier[String(tier)] ?? 0;
 }
 
-export function isAutoSolverReady(levels: UpgradeState, manualClearsByTier: Readonly<Record<string, number>>, tier: number): boolean {
+export function isAutoSolverReady(
+  levels: UpgradeState,
+  manualClearsByTier: Readonly<Record<string, number>>,
+  tier: number,
+  requiredManualClears: number = GAME_CONFIG.solver.manualClearsRequiredByTierForAutoSolver,
+): boolean {
   return (levels["auto-solver"] ?? 0) > 0
-    && manualClearsForTier(manualClearsByTier, tier) >= GAME_CONFIG.solver.manualClearsRequiredByTierForAutoSolver;
+    && manualClearsForTier(manualClearsByTier, tier) >= requiredManualClears;
 }
 
 const HIGH_TIER_SOLVER_MIN_TIER = 7;

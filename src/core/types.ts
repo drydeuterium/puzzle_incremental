@@ -129,6 +129,27 @@ export type PrestigeUpgradeId =
 
 export type PrestigeUpgradeState = Readonly<Record<PrestigeUpgradeId, number>>;
 
+export type ChallengeId =
+  | "manual-only"
+  | "expensive-tiers"
+  | "low-reward";
+
+export type ChallengeUpgradeId =
+  | "automation-procedure"
+  | "insight-ladder"
+  | "assisted-insight"
+  | "automated-insight"
+  | "initial-analysis";
+
+export type ChallengeUpgradeState = Readonly<Record<ChallengeUpgradeId, number>>;
+
+export type ChallengeState = Readonly<{
+  seals: number;
+  lifetimeSeals: number;
+  completions: Readonly<Record<ChallengeId, number>>;
+  upgradeLevels: ChallengeUpgradeState;
+}>;
+
 export type PrestigeState = Readonly<{
   insight: number;
   lifetimeInsight: number;
@@ -142,6 +163,7 @@ export type RunState = Readonly<{
   manualClearsByTier: Readonly<Record<string, number>>;
   clearsByTier: Readonly<Record<string, number>>;
   highestTier: number;
+  activeChallengeId: ChallengeId | null;
 }>;
 
 export type UserSettings = Readonly<{
@@ -205,6 +227,7 @@ export type SaveDataV1 = Readonly<{
     autoSeedCounters: Readonly<Record<string, number>>;
   }>;
   prestige: PrestigeState;
+  challenge: ChallengeState;
   run: RunState;
   currentPuzzle: SavedPuzzle | null;
   statistics: Statistics;
