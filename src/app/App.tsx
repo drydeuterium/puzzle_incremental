@@ -1092,6 +1092,10 @@ function challengePurchaseReason(copy: AppCopy, outcome: ChallengePurchaseOutcom
   return copy.notEnoughSeal;
 }
 
+function purchaseButtonLabel(copy: AppCopy, language: SaveDataV1["settings"]["language"], price: number, currency: "C" | "I" | "S"): string {
+  return `${formatNumber(price, language)}${currency} ${copy.buy}`;
+}
+
 function classificationLabel(copy: AppCopy, classification: ClearClassification): string {
   return copy.classificationLabels[classification];
 }
@@ -3053,7 +3057,7 @@ export function App() {
                     </div>
                     <p className="upgrade-description">{copy.upgradeDescriptions[upgrade.id]}</p>
                     <p>{outcome.ok ? `${copy.next}: ${outcome.price}C` : `${price}C, ${purchaseReason(copy, outcome)}`}</p>
-                    <button type="button" onClick={() => dispatch({ type: "purchase", upgradeId: upgrade.id })} disabled={!outcome.ok}>{copy.buy}</button>
+                    <button className="purchase-button" type="button" onClick={() => dispatch({ type: "purchase", upgradeId: upgrade.id })} disabled={!outcome.ok}>{purchaseButtonLabel(copy, language, price, "C")}</button>
                   </article>
                 );
               })}
@@ -3133,7 +3137,7 @@ export function App() {
                         </div>
                         <p className="upgrade-description">{copy.prestigeUpgradeDescriptions[upgrade.id]}</p>
                         <p>{outcome.ok ? `${copy.next}: ${outcome.price} ${copy.insight}` : `${price} ${copy.insight}, ${prestigePurchaseReason(copy, outcome)}`}</p>
-                        <button type="button" onClick={() => dispatch({ type: "purchase-prestige", upgradeId: upgrade.id })} disabled={!outcome.ok}>{copy.buy}</button>
+                        <button className="purchase-button" type="button" onClick={() => dispatch({ type: "purchase-prestige", upgradeId: upgrade.id })} disabled={!outcome.ok}>{purchaseButtonLabel(copy, language, price, "I")}</button>
                       </article>
                     );
                   })}
@@ -3201,7 +3205,7 @@ export function App() {
                             <p className="upgrade-description">{copy.challengeUpgradeDescriptions[upgrade.id]}</p>
                             {upgrade.id === "insight-ladder" && <p>{copy.insightMinimumTier(insightMinimumTier(state.save.challenge.upgradeLevels))}{nextMinimumTier ? ` / ${copy.nextInsightMinimumTier(nextMinimumTier)}` : ""}</p>}
                             <p>{outcome.ok ? `${copy.next}: ${outcome.price} ${copy.seal}` : `${price} ${copy.seal}, ${challengePurchaseReason(copy, outcome)}`}</p>
-                            <button type="button" onClick={() => dispatch({ type: "purchase-challenge-upgrade", upgradeId: upgrade.id })} disabled={!outcome.ok}>{copy.buy}</button>
+                            <button className="purchase-button" type="button" onClick={() => dispatch({ type: "purchase-challenge-upgrade", upgradeId: upgrade.id })} disabled={!outcome.ok}>{purchaseButtonLabel(copy, language, price, "S")}</button>
                           </article>
                         );
                       })}

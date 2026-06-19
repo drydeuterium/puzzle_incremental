@@ -731,6 +731,10 @@ button:disabled {
   min-height: 30px;
 }
 
+.purchase-button {
+  word-spacing: 12px;
+}
+
 .prestige-body {
   grid-template-rows: auto auto minmax(0, 1fr) auto;
   width: min(780px, calc(100vw - 40px));

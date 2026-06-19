@@ -840,7 +840,7 @@ describe("App", () => {
     const tierPanel = screen.getByRole("tabpanel", { name: "Tier" });
     const tierOneCard = within(tierPanel).getByText("Tier 1").closest("article") as HTMLElement;
     expect(tierOneCard).toHaveTextContent("requires a manual Tier 0 clear this prestige");
-    expect(within(tierOneCard).getByRole("button", { name: "Buy" })).toBeDisabled();
+    expect(within(tierOneCard).getByRole("button", { name: "350C Buy" })).toBeDisabled();
 
     for (const [pieceId, anchor] of [["p0", 0], ["p1", 2], ["p2", 8], ["p3", 10]] as const) {
       await user.click(screen.getByTestId(`piece-${pieceId}`));
@@ -848,7 +848,7 @@ describe("App", () => {
     }
     await user.click(screen.getByRole("button", { name: "Close" }));
 
-    expect(within(tierOneCard).getByRole("button", { name: "Buy" })).toBeEnabled();
+    expect(within(tierOneCard).getByRole("button", { name: "350C Buy" })).toBeEnabled();
   });
 
   it("hides topbar prestige controls until the prestige system is unlocked", () => {
@@ -873,7 +873,7 @@ describe("App", () => {
     expect(dialog).toHaveTextContent("Permanent upgrades");
     const rewardCard = within(dialog).getByText("Reward Analysis").closest("article") as HTMLElement;
     expect(rewardCard).toHaveTextContent("1 Insight, not enough Insight");
-    expect(within(rewardCard).getByRole("button", { name: "Buy" })).toBeDisabled();
+    expect(within(rewardCard).getByRole("button", { name: "1I Buy" })).toBeDisabled();
   });
 
   it("reveals EX tiers after prestige and keeps them manual-only", async () => {
@@ -967,7 +967,7 @@ describe("App", () => {
     expect(dialog).toHaveTextContent("Seal Upgrades");
     const ladderCard = within(dialog).getByText("Insight Ladder").closest("article") as HTMLElement;
     expect(ladderCard).toHaveTextContent("Insight starts at Tier 9");
-    await user.click(within(ladderCard).getByRole("button", { name: "Buy" }));
+    await user.click(within(ladderCard).getByRole("button", { name: "2S Buy" }));
 
     expect(ladderCard).toHaveTextContent("Level 1/8");
     expect(ladderCard).toHaveTextContent("Insight starts at Tier 8");
