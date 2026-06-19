@@ -3141,61 +3141,72 @@ export function App() {
               </div>
             )}
             {selectedPrestigeTab === "challenge" && (
-              <div className="prestige-tab-panel" role="tabpanel" aria-label={copy.prestigeTabs.challenge}>
-                <div className="prestige-summary">
+              <div className="prestige-tab-panel challenge-tab-panel" role="tabpanel" aria-label={copy.prestigeTabs.challenge}>
+                <div className="prestige-summary challenge-summary">
                   <div className="metric"><span>{copy.seal}</span><strong>{formatNumber(state.save.challenge.seals, language)}</strong></div>
                   <div className="metric"><span>{copy.lifetimeSeal}</span><strong>{formatNumber(state.save.challenge.lifetimeSeals, language)}</strong></div>
                   <div className="metric"><span>{copy.activeChallenge}</span><strong>{state.save.run.activeChallengeId ? challengeName(copy, state.save.run.activeChallengeId) : copy.noActiveChallenge}</strong></div>
                   <div className="metric"><span>{copy.insight}</span><strong>{copy.insightMinimumTier(insightMinimumTier(state.save.challenge.upgradeLevels))}</strong></div>
                 </div>
-                <p>{challengeUnlocked ? copy.challengeGoal : copy.challengeLocked}</p>
-                {state.save.run.activeChallengeId && <button type="button" onClick={requestChallengeAbandon}>{copy.abandonChallenge}</button>}
-                <div className="challenge-list">
-                  {CHALLENGES.map((challenge) => {
-                    const completions = state.save.challenge.completions[challenge.id] ?? 0;
-                    const firstReward = getChallengeConfig(challenge.id).firstSealReward;
-                    const repeatReward = getChallengeConfig(challenge.id).replaySealReward;
-                    return (
-                      <article className="upgrade" key={challenge.id}>
-                        <div className="upgrade-header">
-                          <strong>{challengeName(copy, challenge.id)}</strong>
-                          <span>{copy.challengeCompletedCount(completions)}</span>
-                        </div>
-                        <p className="upgrade-description">{copy.challengeDescriptions[challenge.id]}</p>
-                        <p>{copy.firstClearReward(firstReward)} / {copy.repeatClearReward(repeatReward)}</p>
-                        <button
-                          type="button"
-                          onClick={() => requestChallengeStart(challenge.id)}
-                          disabled={!challengeUnlocked || state.save.prestige.pendingInsight > 0 || Boolean(state.save.run.activeChallengeId)}
-                        >
-                          {copy.startChallenge}
-                        </button>
-                      </article>
-                    );
-                  })}
-                </div>
-                <h3>{copy.seal} {copy.upgrades}</h3>
-                <div className="prestige-upgrade-list">
-                  {CHALLENGE_UPGRADES.map((upgrade) => {
-                    const level = state.save.challenge.upgradeLevels[upgrade.id] ?? 0;
-                    const outcome = canPurchaseChallengeUpgrade(state.save.challenge, upgrade.id);
-                    const price = getChallengeUpgradePrice(upgrade.id, level);
-                    const nextMinimumTier = upgrade.id === "insight-ladder"
-                      ? insightMinimumTier({ ...state.save.challenge.upgradeLevels, "insight-ladder": Math.min(upgrade.maxLevel, level + 1) })
-                      : null;
-                    return (
-                      <article className={`upgrade ${level >= upgrade.maxLevel ? "owned" : ""}`} key={upgrade.id}>
-                        <div className="upgrade-header">
-                          <strong>{challengeUpgradeName(copy, upgrade.id)}</strong>
-                          <span>{copy.level} {level}/{upgrade.maxLevel}</span>
-                        </div>
-                        <p className="upgrade-description">{copy.challengeUpgradeDescriptions[upgrade.id]}</p>
-                        {upgrade.id === "insight-ladder" && <p>{copy.insightMinimumTier(insightMinimumTier(state.save.challenge.upgradeLevels))}{nextMinimumTier ? ` / ${copy.nextInsightMinimumTier(nextMinimumTier)}` : ""}</p>}
-                        <p>{outcome.ok ? `${copy.next}: ${outcome.price} ${copy.seal}` : `${price} ${copy.seal}, ${challengePurchaseReason(copy, outcome)}`}</p>
-                        <button type="button" onClick={() => dispatch({ type: "purchase-challenge-upgrade", upgradeId: upgrade.id })} disabled={!outcome.ok}>{copy.buy}</button>
-                      </article>
-                    );
-                  })}
+                <div className="challenge-content-grid">
+                  <section className="challenge-column">
+                    <div className="modal-section-heading">
+                      <h3>{copy.challenge}</h3>
+                      {state.save.run.activeChallengeId && <button type="button" onClick={requestChallengeAbandon}>{copy.abandonChallenge}</button>}
+                    </div>
+                    <p className="modal-note">{challengeUnlocked ? copy.challengeGoal : copy.challengeLocked}</p>
+                    <div className="challenge-list">
+                      {CHALLENGES.map((challenge) => {
+                        const completions = state.save.challenge.completions[challenge.id] ?? 0;
+                        const firstReward = getChallengeConfig(challenge.id).firstSealReward;
+                        const repeatReward = getChallengeConfig(challenge.id).replaySealReward;
+                        return (
+                          <article className="upgrade" key={challenge.id}>
+                            <div className="upgrade-header">
+                              <strong>{challengeName(copy, challenge.id)}</strong>
+                              <span>{copy.challengeCompletedCount(completions)}</span>
+                            </div>
+                            <p className="upgrade-description">{copy.challengeDescriptions[challenge.id]}</p>
+                            <p>{copy.firstClearReward(firstReward)} / {copy.repeatClearReward(repeatReward)}</p>
+                            <button
+                              type="button"
+                              onClick={() => requestChallengeStart(challenge.id)}
+                              disabled={!challengeUnlocked || state.save.prestige.pendingInsight > 0 || Boolean(state.save.run.activeChallengeId)}
+                            >
+                              {copy.startChallenge}
+                            </button>
+                          </article>
+                        );
+                      })}
+                    </div>
+                  </section>
+                  <section className="challenge-column">
+                    <div className="modal-section-heading">
+                      <h3>{copy.seal} {copy.upgrades}</h3>
+                    </div>
+                    <div className="prestige-upgrade-list challenge-upgrade-list">
+                      {CHALLENGE_UPGRADES.map((upgrade) => {
+                        const level = state.save.challenge.upgradeLevels[upgrade.id] ?? 0;
+                        const outcome = canPurchaseChallengeUpgrade(state.save.challenge, upgrade.id);
+                        const price = getChallengeUpgradePrice(upgrade.id, level);
+                        const nextMinimumTier = upgrade.id === "insight-ladder"
+                          ? insightMinimumTier({ ...state.save.challenge.upgradeLevels, "insight-ladder": Math.min(upgrade.maxLevel, level + 1) })
+                          : null;
+                        return (
+                          <article className={`upgrade ${level >= upgrade.maxLevel ? "owned" : ""}`} key={upgrade.id}>
+                            <div className="upgrade-header">
+                              <strong>{challengeUpgradeName(copy, upgrade.id)}</strong>
+                              <span>{copy.level} {level}/{upgrade.maxLevel}</span>
+                            </div>
+                            <p className="upgrade-description">{copy.challengeUpgradeDescriptions[upgrade.id]}</p>
+                            {upgrade.id === "insight-ladder" && <p>{copy.insightMinimumTier(insightMinimumTier(state.save.challenge.upgradeLevels))}{nextMinimumTier ? ` / ${copy.nextInsightMinimumTier(nextMinimumTier)}` : ""}</p>}
+                            <p>{outcome.ok ? `${copy.next}: ${outcome.price} ${copy.seal}` : `${price} ${copy.seal}, ${challengePurchaseReason(copy, outcome)}`}</p>
+                            <button type="button" onClick={() => dispatch({ type: "purchase-challenge-upgrade", upgradeId: upgrade.id })} disabled={!outcome.ok}>{copy.buy}</button>
+                          </article>
+                        );
+                      })}
+                    </div>
+                  </section>
                 </div>
               </div>
             )}
@@ -3239,117 +3250,125 @@ export function App() {
 
       {state.settingsOpen && (
         <div className="modal" role="dialog" aria-modal="true">
-          <div className="modal-body">
+          <div className="modal-body settings-body">
             <h2>{copy.settings}</h2>
-            <label className="setting-field">{copy.theme}
-              <select value={theme} onChange={(event) => dispatch({ type: "set-theme", value: event.target.value as SaveDataV1["settings"]["theme"] })}>
-                <option value="system">{copy.system}</option>
-                <option value="light">{copy.light}</option>
-                <option value="dark">{copy.dark}</option>
-              </select>
-            </label>
-            <label className="setting-field">{copy.language}
-              <select value={language} onChange={(event) => dispatch({ type: "set-language", value: event.target.value as SaveDataV1["settings"]["language"] })}>
-                <option value="en">{copy.english}</option>
-                <option value="ja">{copy.japanese}</option>
-              </select>
-            </label>
-            <label className="setting-field">{copy.visualization}
-              <select value={state.save.settings.visualization} onChange={(event) => dispatch({ type: "set-visualization", value: event.target.value as SaveDataV1["settings"]["visualization"] })}>
-                <option value="on">{copy.on}</option>
-                <option value="reduced">{copy.reduced}</option>
-                <option value="off">{copy.off}</option>
-              </select>
-            </label>
-            <label className="setting-field setting-range-field">
-              <span className="setting-range-header">
-                <span>{uiScaleLabel(language)}</span>
-                <strong>{Math.round(state.save.settings.uiScale * 100)}%</strong>
-              </span>
-              <input
-                aria-label={uiScaleLabel(language)}
-                type="range"
-                min={UI_SCALE_MIN}
-                max={UI_SCALE_MAX}
-                step={UI_SCALE_STEP}
-                value={state.save.settings.uiScale}
-                onChange={(event) => dispatch({ type: "set-ui-scale", value: Number(event.target.value) })}
-              />
-            </label>
-            <label className="setting-field setting-range-field">
-              <span className="setting-range-header">
-                <span>{copy.solverLaneHoldTime}</span>
-                <strong>{formatMilliseconds(state.save.settings.solverLaneMinSessionMs)}</strong>
-              </span>
-              <input
-                aria-label={copy.solverLaneHoldTime}
-                type="range"
-                min={SOLVER_LANE_MIN_SESSION_MS_MIN}
-                max={SOLVER_LANE_MIN_SESSION_MS_MAX}
-                step={SOLVER_LANE_MIN_SESSION_MS_STEP}
-                value={state.save.settings.solverLaneMinSessionMs}
-                onChange={(event) => dispatch({ type: "set-solver-lane-min-session-ms", value: Number(event.target.value) })}
-              />
-            </label>
-            <label className="setting-field setting-range-field">
-              <span className="setting-range-header">
-                <span>{copy.solverLaneUpdateInterval}</span>
-                <strong>{formatMilliseconds(state.save.settings.solverLanePreviewUpdateMs)}</strong>
-              </span>
-              <input
-                aria-label={copy.solverLaneUpdateInterval}
-                type="range"
-                min={SOLVER_LANE_PREVIEW_UPDATE_MS_MIN}
-                max={SOLVER_LANE_PREVIEW_UPDATE_MS_MAX}
-                step={SOLVER_LANE_PREVIEW_UPDATE_MS_STEP}
-                value={state.save.settings.solverLanePreviewUpdateMs}
-                onChange={(event) => dispatch({ type: "set-solver-lane-preview-update-ms", value: Number(event.target.value) })}
-              />
-            </label>
-            <label className="setting-toggle-row">
-              <span>{copy.highContrast}</span>
-              <input type="checkbox" checked={state.save.settings.highContrast} onChange={(event) => dispatch({ type: "set-high-contrast", value: event.target.checked })} />
-              <span className="switch" aria-hidden="true" />
-            </label>
-            <label className="setting-toggle-row">
-              <span>{copy.notifications}</span>
-              <input type="checkbox" checked={state.save.settings.notificationsEnabled} onChange={(event) => dispatch({ type: "set-notifications-enabled", value: event.target.checked })} />
-              <span className="switch" aria-hidden="true" />
-            </label>
-            <button type="button" onClick={() => {
-              const blob = new Blob([exportSave(saveFromState(state))], { type: "application/json" });
-              const url = URL.createObjectURL(blob);
-              const link = document.createElement("a");
-              const stamp = new Date().toISOString().replace(/[-:T]/g, "").slice(0, 13);
-              link.href = url;
-              link.download = `puzzle_incremental-save-${stamp}.json`;
-              link.click();
-              URL.revokeObjectURL(url);
-            }}>{copy.exportSave}</button>
-            <label className="file-button">{copy.importSave}
-              <input type="file" accept="application/json" onChange={(event) => {
-                const file = event.target.files?.[0];
-                if (!file) {
-                  return;
-                }
-                file.text().then((text) => {
-                  const imported = importSave(text);
-                  dispatch(imported ? { type: "import", save: imported } : { type: "toast", message: copy.invalidSave });
-                }).catch(() => dispatch({ type: "toast", message: copy.importFailed }));
-              }} />
-            </label>
-            <label className="setting-field">{copy.eraseSave}
-              <input value={eraseText} onChange={(event) => setEraseText(event.target.value)} placeholder={copy.erasePlaceholder} />
-            </label>
-            <button type="button" disabled={eraseText !== "ERASE"} onClick={() => {
-              eraseSave();
-              const fresh = createInitialSave();
-              dispatch({ type: "erase", save: fresh });
-              setEraseText("");
-            }}>{copy.eraseSave}</button>
-            <button type="button" onClick={() => dispatch({ type: "set-tutorial-open", value: true })}>{copy.openTutorial}</button>
-            <p>{copy.version} {GAME_CONFIG.gameConfigVersion}</p>
-            <button type="button" onClick={() => dispatch({ type: "set-settings-open", value: false })}>{copy.close}</button>
+            <div className="settings-grid">
+              <section className="settings-section">
+                <label className="setting-field">{copy.theme}
+                  <select value={theme} onChange={(event) => dispatch({ type: "set-theme", value: event.target.value as SaveDataV1["settings"]["theme"] })}>
+                    <option value="system">{copy.system}</option>
+                    <option value="light">{copy.light}</option>
+                    <option value="dark">{copy.dark}</option>
+                  </select>
+                </label>
+                <label className="setting-field">{copy.language}
+                  <select value={language} onChange={(event) => dispatch({ type: "set-language", value: event.target.value as SaveDataV1["settings"]["language"] })}>
+                    <option value="en">{copy.english}</option>
+                    <option value="ja">{copy.japanese}</option>
+                  </select>
+                </label>
+                <label className="setting-field">{copy.visualization}
+                  <select value={state.save.settings.visualization} onChange={(event) => dispatch({ type: "set-visualization", value: event.target.value as SaveDataV1["settings"]["visualization"] })}>
+                    <option value="on">{copy.on}</option>
+                    <option value="reduced">{copy.reduced}</option>
+                    <option value="off">{copy.off}</option>
+                  </select>
+                </label>
+                <label className="setting-field setting-range-field">
+                  <span className="setting-range-header">
+                    <span>{uiScaleLabel(language)}</span>
+                    <strong>{Math.round(state.save.settings.uiScale * 100)}%</strong>
+                  </span>
+                  <input
+                    aria-label={uiScaleLabel(language)}
+                    type="range"
+                    min={UI_SCALE_MIN}
+                    max={UI_SCALE_MAX}
+                    step={UI_SCALE_STEP}
+                    value={state.save.settings.uiScale}
+                    onChange={(event) => dispatch({ type: "set-ui-scale", value: Number(event.target.value) })}
+                  />
+                </label>
+                <label className="setting-toggle-row">
+                  <span>{copy.highContrast}</span>
+                  <input type="checkbox" checked={state.save.settings.highContrast} onChange={(event) => dispatch({ type: "set-high-contrast", value: event.target.checked })} />
+                  <span className="switch" aria-hidden="true" />
+                </label>
+                <label className="setting-toggle-row">
+                  <span>{copy.notifications}</span>
+                  <input type="checkbox" checked={state.save.settings.notificationsEnabled} onChange={(event) => dispatch({ type: "set-notifications-enabled", value: event.target.checked })} />
+                  <span className="switch" aria-hidden="true" />
+                </label>
+              </section>
+              <section className="settings-section">
+                <label className="setting-field setting-range-field">
+                  <span className="setting-range-header">
+                    <span>{copy.solverLaneHoldTime}</span>
+                    <strong>{formatMilliseconds(state.save.settings.solverLaneMinSessionMs)}</strong>
+                  </span>
+                  <input
+                    aria-label={copy.solverLaneHoldTime}
+                    type="range"
+                    min={SOLVER_LANE_MIN_SESSION_MS_MIN}
+                    max={SOLVER_LANE_MIN_SESSION_MS_MAX}
+                    step={SOLVER_LANE_MIN_SESSION_MS_STEP}
+                    value={state.save.settings.solverLaneMinSessionMs}
+                    onChange={(event) => dispatch({ type: "set-solver-lane-min-session-ms", value: Number(event.target.value) })}
+                  />
+                </label>
+                <label className="setting-field setting-range-field">
+                  <span className="setting-range-header">
+                    <span>{copy.solverLaneUpdateInterval}</span>
+                    <strong>{formatMilliseconds(state.save.settings.solverLanePreviewUpdateMs)}</strong>
+                  </span>
+                  <input
+                    aria-label={copy.solverLaneUpdateInterval}
+                    type="range"
+                    min={SOLVER_LANE_PREVIEW_UPDATE_MS_MIN}
+                    max={SOLVER_LANE_PREVIEW_UPDATE_MS_MAX}
+                    step={SOLVER_LANE_PREVIEW_UPDATE_MS_STEP}
+                    value={state.save.settings.solverLanePreviewUpdateMs}
+                    onChange={(event) => dispatch({ type: "set-solver-lane-preview-update-ms", value: Number(event.target.value) })}
+                  />
+                </label>
+                <button type="button" onClick={() => {
+                  const blob = new Blob([exportSave(saveFromState(state))], { type: "application/json" });
+                  const url = URL.createObjectURL(blob);
+                  const link = document.createElement("a");
+                  const stamp = new Date().toISOString().replace(/[-:T]/g, "").slice(0, 13);
+                  link.href = url;
+                  link.download = `puzzle_incremental-save-${stamp}.json`;
+                  link.click();
+                  URL.revokeObjectURL(url);
+                }}>{copy.exportSave}</button>
+                <label className="file-button setting-file-field">{copy.importSave}
+                  <input type="file" accept="application/json" onChange={(event) => {
+                    const file = event.target.files?.[0];
+                    if (!file) {
+                      return;
+                    }
+                    file.text().then((text) => {
+                      const imported = importSave(text);
+                      dispatch(imported ? { type: "import", save: imported } : { type: "toast", message: copy.invalidSave });
+                    }).catch(() => dispatch({ type: "toast", message: copy.importFailed }));
+                  }} />
+                </label>
+                <label className="setting-field">{copy.eraseSave}
+                  <input value={eraseText} onChange={(event) => setEraseText(event.target.value)} placeholder={copy.erasePlaceholder} />
+                </label>
+                <button type="button" disabled={eraseText !== "ERASE"} onClick={() => {
+                  eraseSave();
+                  const fresh = createInitialSave();
+                  dispatch({ type: "erase", save: fresh });
+                  setEraseText("");
+                }}>{copy.eraseSave}</button>
+                <button type="button" onClick={() => dispatch({ type: "set-tutorial-open", value: true })}>{copy.openTutorial}</button>
+              </section>
+            </div>
+            <div className="settings-footer">
+              <p>{copy.version} {GAME_CONFIG.gameConfigVersion}</p>
+              <button type="button" onClick={() => dispatch({ type: "set-settings-open", value: false })}>{copy.close}</button>
+            </div>
           </div>
         </div>
       )}
