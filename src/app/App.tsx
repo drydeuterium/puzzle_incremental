@@ -2862,6 +2862,46 @@ export function App() {
     ? copy.challengeAbandonAction
     : copy.discardConfirmAction;
 
+  const renderPieceButton = (piece: PieceInstance, variant: "tray" | "mobile-board") => {
+    const placedPlacement = state.puzzle.board.placementsByPieceId[piece.id];
+    const placed = Boolean(placedPlacement);
+    const orientationIndex = placedPlacement?.orientationIndex ?? state.rotations[piece.id] ?? 0;
+    const orientation = orientationForPiece(piece, orientationIndex);
+    const occupiedMiniCells = new Set(orientation.cells.map((cell) => `${cell.x}:${cell.y}`));
+    return (
+      <button
+        key={`${variant}-${piece.id}`}
+        type="button"
+        data-testid={variant === "tray" ? `piece-${piece.id}` : `mobile-piece-${piece.id}`}
+        className={`piece-card ${variant === "mobile-board" ? "mobile-piece-card" : ""} ${state.selectedPieceId === piece.id ? "selected" : ""} ${placed ? "placed-card" : ""}`}
+        style={pieceColorVariables(piece, puzzle.seed)}
+        disabled={state.puzzle.cleared}
+        onClick={() => selectPieceFromTray(piece.id)}
+        onContextMenu={(event) => {
+          event.preventDefault();
+          if (placed) {
+            dispatch({ type: "remove-piece", pieceId: piece.id });
+          } else {
+            dispatch({ type: "rotate", direction: 1 });
+          }
+        }}
+      >
+        <span className="piece-mini" data-testid={variant === "tray" ? `piece-shape-${piece.id}` : `mobile-piece-shape-${piece.id}`} aria-hidden="true">
+          {Array.from({ length: 16 }, (_, miniIndex) => {
+            const x = miniIndex % 4;
+            const y = Math.floor(miniIndex / 4);
+            return <span key={miniIndex} className={`piece-mini-cell ${occupiedMiniCells.has(`${x}:${y}`) ? "filled" : ""}`} />;
+          })}
+        </span>
+        <span className="piece-info">
+          <strong>{piece.type} #{piece.id.slice(1)}</strong>
+          <span>{copy.rotation} {orientationIndex}</span>
+        </span>
+        <span className="piece-status">{placed ? copy.placed : copy.ready}</span>
+      </button>
+    );
+  };
+
   return (
     <main className={appClassName} style={appStyle} data-testid="app-shell">
       <header className="topbar">
@@ -2900,45 +2940,7 @@ export function App() {
         <aside className="panel left-panel">
           <h2>{copy.pieces}</h2>
           <div className="piece-tray">
-            {trayPieces.map((piece) => {
-              const placedPlacement = state.puzzle.board.placementsByPieceId[piece.id];
-              const placed = Boolean(placedPlacement);
-              const orientationIndex = placedPlacement?.orientationIndex ?? state.rotations[piece.id] ?? 0;
-              const orientation = orientationForPiece(piece, orientationIndex);
-              const occupiedMiniCells = new Set(orientation.cells.map((cell) => `${cell.x}:${cell.y}`));
-              return (
-                <button
-                  key={piece.id}
-                  type="button"
-                  data-testid={`piece-${piece.id}`}
-                  className={`piece-card ${state.selectedPieceId === piece.id ? "selected" : ""} ${placed ? "placed-card" : ""}`}
-                  style={pieceColorVariables(piece, puzzle.seed)}
-                  disabled={state.puzzle.cleared}
-                  onClick={() => selectPieceFromTray(piece.id)}
-                  onContextMenu={(event) => {
-                    event.preventDefault();
-                    if (placed) {
-                      dispatch({ type: "remove-piece", pieceId: piece.id });
-                    } else {
-                      dispatch({ type: "rotate", direction: 1 });
-                    }
-                  }}
-                >
-                  <span className="piece-mini" data-testid={`piece-shape-${piece.id}`} aria-hidden="true">
-                    {Array.from({ length: 16 }, (_, miniIndex) => {
-                      const x = miniIndex % 4;
-                      const y = Math.floor(miniIndex / 4);
-                      return <span key={miniIndex} className={`piece-mini-cell ${occupiedMiniCells.has(`${x}:${y}`) ? "filled" : ""}`} />;
-                    })}
-                  </span>
-                  <span className="piece-info">
-                    <strong>{piece.type} #{piece.id.slice(1)}</strong>
-                    <span>{copy.rotation} {orientationIndex}</span>
-                  </span>
-                  <span className="piece-status">{placed ? copy.placed : copy.ready}</span>
-                </button>
-              );
-            })}
+            {trayPieces.map((piece) => renderPieceButton(piece, "tray"))}
           </div>
           <div className="controls">
             <button type="button" onClick={() => startNewPuzzle(false)}>{copy.newPuzzle}</button>
@@ -2990,6 +2992,21 @@ export function App() {
                   </button>
                 ))}
               </div>
+              {isMobileLayout && (
+                <label className="mobile-tier-select">
+                  <span>{copy.tierSelection}</span>
+                  <select
+                    value={state.save.progression.selectedTier}
+                    onChange={(event) => switchTier(Number.parseInt(event.target.value, 10), Date.now())}
+                  >
+                    {visibleTiers.map((tier) => (
+                      <option key={tier.id} value={tier.id} disabled={!isTierAvailableForSave(state.save, tier.id)}>
+                        {tierLabel(copy, tier.id)}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              )}
             </div>
             <div className="board-viewport" ref={boardViewportRef}>
               <div
@@ -3029,6 +3046,11 @@ export function App() {
                 })}
               </div>
             </div>
+            {isMobileLayout && (
+              <div className="mobile-board-piece-tray" aria-label={copy.pieces}>
+                {trayPieces.map((piece) => renderPieceButton(piece, "mobile-board"))}
+              </div>
+            )}
             {isMobileLayout && (
               <div className="mobile-board-actions" data-testid="mobile-board-actions">
                 <div className="mobile-selection-summary">

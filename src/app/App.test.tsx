@@ -733,13 +733,16 @@ describe("App", () => {
     const user = userEvent.setup();
     render(<App />);
     const app = screen.getByTestId("app-shell");
-    const piece = screen.getByTestId("piece-p0");
+    const piece = screen.getByTestId("mobile-piece-p0");
     const cell = screen.getByTestId("cell-0");
     const toolbar = screen.getByTestId("mobile-board-actions");
 
     expect(app).toHaveClass("mobile-tab-board");
+    expect(screen.getByRole("combobox", { name: "Tier selection" })).toBeInTheDocument();
     await user.click(screen.getByRole("tab", { name: "Pieces" }));
     expect(app).toHaveClass("mobile-tab-pieces");
+    await user.click(screen.getByRole("tab", { name: "Board" }));
+    expect(app).toHaveClass("mobile-tab-board");
 
     await user.click(piece);
     expect(app).toHaveClass("mobile-tab-board");

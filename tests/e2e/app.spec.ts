@@ -7,6 +7,16 @@ async function openMobileTabIfVisible(page: Page, name: string): Promise<void> {
   }
 }
 
+async function clickPuzzlePiece(page: Page, index: number): Promise<void> {
+  const mobilePiece = page.getByTestId(`mobile-piece-p${index}`);
+  if ((await mobilePiece.count()) > 0 && await mobilePiece.first().isVisible()) {
+    await mobilePiece.first().click();
+    return;
+  }
+  await openMobileTabIfVisible(page, "Pieces");
+  await page.getByTestId(`piece-p${index}`).click();
+}
+
 test.beforeEach(async ({ page }) => {
   await page.goto("/");
   await page.evaluate(() => localStorage.clear());
@@ -112,9 +122,9 @@ test("fresh start manual clear", async ({ page }) => {
   await expect(tierOneCard.getByRole("button", { name: /Buy/ })).toBeDisabled();
 
   const anchors = [0, 2, 8, 10];
+  await openMobileTabIfVisible(page, "Board");
   for (let index = 0; index < anchors.length; index += 1) {
-    await openMobileTabIfVisible(page, "Pieces");
-    await page.getByTestId(`piece-p${index}`).click();
+    await clickPuzzlePiece(page, index);
     await page.getByTestId(`cell-${anchors[index]}`).click();
   }
   await expect(page.getByRole("dialog").getByText(/manual clear/i)).toBeVisible();
