@@ -3279,6 +3279,18 @@ export function App() {
                 </button>
               ))}
             </div>
+            <label className="mobile-prestige-tab-select">
+              <span>{copy.prestige}</span>
+              <select
+                aria-label={copy.prestige}
+                value={selectedPrestigeTab}
+                onChange={(event) => setActivePrestigeTab(event.target.value as PrestigeTabId)}
+              >
+                {prestigeTabs.map((tab) => (
+                  <option key={tab} value={tab}>{copy.prestigeTabs[tab]}</option>
+                ))}
+              </select>
+            </label>
             {selectedPrestigeTab === "summary" && (
               <div className="prestige-tab-panel" role="tabpanel" aria-label={copy.prestigeTabs.summary}>
                 <div className="prestige-summary">

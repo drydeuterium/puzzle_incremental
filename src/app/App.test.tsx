@@ -979,6 +979,20 @@ describe("App", () => {
     expect(within(rewardCard).getByRole("button", { name: "1I Buy" })).toBeDisabled();
   });
 
+  it("uses a select for prestige tabs on mobile", async () => {
+    stubMobileViewport();
+    seedPrestigeReadySave();
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.click(screen.getByRole("button", { name: "Prestige +1" }));
+    const dialog = screen.getByRole("dialog");
+    const tabSelect = within(dialog).getByRole("combobox", { name: "Prestige" });
+
+    await user.selectOptions(tabSelect, "upgrades");
+    expect(dialog).toHaveTextContent("Permanent upgrades");
+  });
+
   it("reveals EX tiers after prestige and keeps them manual-only", async () => {
     seedPrestigeReadySave();
     const user = userEvent.setup();

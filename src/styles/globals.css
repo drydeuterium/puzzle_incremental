@@ -293,6 +293,7 @@ button:disabled {
 .mobile-board-actions,
 .mobile-board-piece-tray,
 .mobile-bottom-nav,
+.mobile-prestige-tab-select,
 .mobile-tier-select {
   display: none;
 }
@@ -793,6 +794,7 @@ button:disabled {
 }
 
 .prestige-tab-panel {
+  align-content: start;
   display: grid;
   gap: 10px;
   min-height: 0;
@@ -1564,28 +1566,56 @@ button:disabled {
   }
 
   .modal {
-    align-items: end;
-    padding: 0;
+    align-items: center;
+    place-items: center;
+    padding: 14px 14px calc(72px + env(safe-area-inset-bottom));
   }
 
   .modal-body,
   .modal-body.prestige-body,
   .settings-body,
   .tutorial-body {
-    width: 100%;
-    height: min(100dvh, calc(100vh - 8px));
-    max-height: min(100dvh, calc(100vh - 8px));
+    width: min(100%, calc(100vw - 28px));
+    max-height: calc(100dvh - 112px);
     padding: 14px;
-    border-radius: 12px 12px 0 0;
+    border-radius: 12px;
   }
 
   .modal-body {
+    height: auto;
     overflow-y: auto;
   }
 
   .modal-body.prestige-body,
-  .settings-body {
-    overflow: hidden;
+  .settings-body,
+  .tutorial-body {
+    height: auto;
+    overflow-y: auto;
+  }
+
+  .modal-body:not(.prestige-body):not(.settings-body):not(.tutorial-body) {
+    align-content: start;
+  }
+
+  .modal-body:not(.prestige-body):not(.settings-body):not(.tutorial-body) > button {
+    min-height: 46px;
+    padding: 10px 12px;
+  }
+
+  .prestige-tabs {
+    display: none;
+  }
+
+  .mobile-prestige-tab-select {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    align-items: center;
+    gap: 8px;
+  }
+
+  .mobile-prestige-tab-select select {
+    min-width: 0;
+    min-height: 40px;
   }
 
   .prestige-summary,
@@ -1593,10 +1623,18 @@ button:disabled {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
+  .prestige-tab-panel {
+    max-height: calc(100dvh - 280px);
+  }
+
+  .challenge-tab-panel {
+    overflow-y: auto;
+  }
+
   .challenge-content-grid,
   .settings-grid {
     grid-template-columns: 1fr;
-    overflow-y: auto;
+    overflow-y: visible;
   }
 }
 
