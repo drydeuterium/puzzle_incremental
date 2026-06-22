@@ -544,6 +544,20 @@ describe("App", () => {
     expect(screen.getByTestId("piece-p0")).toHaveTextContent("回転");
   });
 
+  it("deselects a piece after placement", async () => {
+    seedTwoPiecePuzzle();
+    const user = userEvent.setup();
+    render(<App />);
+    const piece = screen.getByTestId("piece-p0");
+
+    await user.click(piece);
+    expect(piece).toHaveClass("selected");
+    await user.click(screen.getByTestId("cell-0"));
+
+    expect(piece).toHaveTextContent("Placed");
+    expect(piece).not.toHaveClass("selected");
+  });
+
   it("renders tier selection through Tier 9 before prestige", async () => {
     const user = userEvent.setup();
     render(<App />);
@@ -676,6 +690,45 @@ describe("App", () => {
     fireEvent.contextMenu(cell);
     expect(piece).toHaveTextContent("Ready");
     expect(cell).toHaveTextContent("");
+  });
+
+  it("cycles memo marks on empty cells and clears them when placing a piece", async () => {
+    seedTwoPiecePuzzle();
+    const user = userEvent.setup();
+    render(<App />);
+    const cell = screen.getByTestId("cell-0");
+    const piece = screen.getByTestId("piece-p0");
+
+    fireEvent.contextMenu(cell);
+    expect(cell).toHaveAttribute("data-cell-mark", "1");
+    fireEvent.click(cell, { shiftKey: true });
+    expect(cell).toHaveAttribute("data-cell-mark", "2");
+    fireEvent.contextMenu(cell);
+    expect(cell).toHaveAttribute("data-cell-mark", "3");
+    fireEvent.contextMenu(cell);
+    expect(cell).toHaveAttribute("data-cell-mark", "0");
+
+    fireEvent.contextMenu(cell);
+    await user.click(piece);
+    await user.click(cell);
+    expect(cell).toHaveAttribute("data-cell-mark", "0");
+  });
+
+  it("does not show a toast when a placed piece cannot rotate", async () => {
+    seedTwoPiecePuzzle();
+    const user = userEvent.setup();
+    render(<App />);
+    const firstPiece = screen.getByTestId("piece-p0");
+
+    await user.click(firstPiece);
+    await user.click(screen.getByTestId("cell-0"));
+    await user.click(screen.getByTestId("piece-p1"));
+    await user.click(screen.getByTestId("cell-4"));
+    await user.click(firstPiece);
+    await user.keyboard("d");
+
+    expect(screen.queryByRole("status")).not.toBeInTheDocument();
+    expect(firstPiece).toHaveTextContent("rot 0");
   });
 
   it("removes a placed piece when right clicking an internal board gap", async () => {

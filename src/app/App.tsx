@@ -75,6 +75,7 @@ type SolverRunSession = Readonly<{
 type UpgradeTabId = "feature" | "tier" | "solver";
 type UpgradeSortOrder = "price-asc" | "config";
 type PrestigeTabId = "summary" | "upgrades" | "challenge";
+type CellMark = 1 | 2 | 3;
 type PendingConfirmation =
   | Readonly<{ type: "reset-board" }>
   | Readonly<{ type: "new-puzzle"; daily: boolean }>
@@ -85,6 +86,7 @@ type PendingConfirmation =
 
 const SOLVER_LANE_SLOT_COUNT = 4;
 const SOLVER_LANE_SESSION_STAGGER_MS = 140;
+const CELL_MARK_STEPS = 3;
 
 type SolverUiState = Readonly<{
   status: SolverStats["status"];
@@ -102,6 +104,7 @@ type AppState = Readonly<{
   save: SaveDataV1;
   puzzle: RuntimePuzzle;
   selectedPieceId: string | null;
+  cellMarks: Readonly<Record<number, CellMark>>;
   rotations: Readonly<Record<string, number>>;
   undoStack: readonly BoardState[];
   redoStack: readonly BoardState[];
@@ -150,6 +153,7 @@ const UPGRADE_ORDER_INDEX = new Map<UpgradeId, number>(GAME_CONFIG.upgrades.map(
 
 type Action =
   | Readonly<{ type: "select-piece"; pieceId: string | null }>
+  | Readonly<{ type: "cycle-cell-mark"; index: number }>
   | Readonly<{ type: "place"; placement: Placement }>
   | Readonly<{ type: "remove-selected" }>
   | Readonly<{ type: "remove-piece"; pieceId: string }>
@@ -1139,6 +1143,17 @@ function saveFromState(state: AppState): SaveDataV1 {
   };
 }
 
+function clearCellMarks(cellMarks: Readonly<Record<number, CellMark>>, indices: readonly number[]): Readonly<Record<number, CellMark>> {
+  if (indices.every((index) => cellMarks[index] === undefined)) {
+    return cellMarks;
+  }
+  const next = { ...cellMarks };
+  for (const index of indices) {
+    delete next[index];
+  }
+  return next;
+}
+
 function createIdleSolverState(autoTier: number): SolverUiState {
   return {
     status: "idle",
@@ -1185,6 +1200,7 @@ function createInitialState(): AppState {
     save,
     puzzle: puzzleFromSave(save),
     selectedPieceId: null,
+    cellMarks: {},
     rotations: {},
     undoStack: [],
     redoStack: [],
@@ -1315,6 +1331,24 @@ function reducer(state: AppState, action: Action): AppState {
   switch (action.type) {
     case "select-piece":
       return { ...state, selectedPieceId: action.pieceId };
+    case "cycle-cell-mark": {
+      if (
+        state.puzzle.cleared
+        || state.puzzle.definition.blockedCellIndices.includes(action.index)
+        || boardPlacements(state.puzzle.board).some((placement) => placement.cellIndices.includes(action.index))
+      ) {
+        return state;
+      }
+      const current = state.cellMarks[action.index] ?? 0;
+      const nextValue = ((current + 1) % (CELL_MARK_STEPS + 1)) as 0 | CellMark;
+      const nextMarks = { ...state.cellMarks };
+      if (nextValue === 0) {
+        delete nextMarks[action.index];
+      } else {
+        nextMarks[action.index] = nextValue;
+      }
+      return { ...state, cellMarks: nextMarks };
+    }
     case "place": {
       const copy = copyForSave(state.save);
       const validation = canPlace(state.puzzle.definition, state.puzzle.board, action.placement);
@@ -1326,7 +1360,8 @@ function reducer(state: AppState, action: Action): AppState {
         puzzle: { ...state.puzzle, board },
         undoStack: [...state.undoStack.slice(-GAME_CONFIG.save.undoHistoryLimit + 1), state.puzzle.board],
         redoStack: [],
-        selectedPieceId: action.placement.pieceId,
+        selectedPieceId: null,
+        cellMarks: clearCellMarks(state.cellMarks, action.placement.cellIndices),
       });
       return awardClear(next, board);
     }
@@ -1366,7 +1401,7 @@ function reducer(state: AppState, action: Action): AppState {
       if (current) {
         const placement = createPlacement(state.puzzle.definition, piece, nextOrientation, current.anchor);
         if (!canPlace(state.puzzle.definition, state.puzzle.board, placement).ok) {
-          return { ...state, toast: copyForSave(state.save).rotationBlocked };
+          return state;
         }
         const board = applyPlacement(state.puzzle.definition, state.puzzle.board, placement);
         return withSavedPuzzle(state, { puzzle: { ...state.puzzle, board }, undoStack: [...state.undoStack, state.puzzle.board], redoStack: [] });
@@ -1401,6 +1436,7 @@ function reducer(state: AppState, action: Action): AppState {
         puzzle: { ...state.puzzle, board: createEmptyBoard(), cleared: false },
         undoStack: hasPlacements ? [...state.undoStack, state.puzzle.board] : state.undoStack,
         redoStack: [],
+        cellMarks: {},
         clearResult: null,
         inspectionMessage: null,
         scannerEnabled: false,
@@ -1410,6 +1446,7 @@ function reducer(state: AppState, action: Action): AppState {
       return withSavedPuzzle(state, {
         puzzle: { definition: action.puzzle, board: createEmptyBoard(), classification: "manual", startedAt: Date.now(), cleared: false },
         selectedPieceId: null,
+        cellMarks: {},
         rotations: {},
         undoStack: [],
         redoStack: [],
@@ -1509,6 +1546,7 @@ function reducer(state: AppState, action: Action): AppState {
         },
         puzzle: { definition: action.puzzle, board: createEmptyBoard(), classification: "manual", startedAt: Date.now(), cleared: false },
         selectedPieceId: null,
+        cellMarks: {},
         rotations: {},
         undoStack: [],
         redoStack: [],
@@ -1537,6 +1575,7 @@ function reducer(state: AppState, action: Action): AppState {
         },
         puzzle: { definition: action.puzzle, board: createEmptyBoard(), classification: "manual", startedAt: Date.now(), cleared: false },
         selectedPieceId: null,
+        cellMarks: {},
         rotations: {},
         undoStack: [],
         redoStack: [],
@@ -1564,6 +1603,7 @@ function reducer(state: AppState, action: Action): AppState {
         },
         puzzle: { definition: action.puzzle, board: createEmptyBoard(), classification: "manual", startedAt: Date.now(), cleared: false },
         selectedPieceId: null,
+        cellMarks: {},
         rotations: {},
         undoStack: [],
         redoStack: [],
@@ -2599,10 +2639,14 @@ export function App() {
     window.addEventListener("pointerup", stopResize, { once: true });
   };
 
-  const handleCellClick = (index: number) => {
+  const handleCellClick = (index: number, event: React.MouseEvent<HTMLButtonElement>) => {
     const placed = placedByCell.get(index);
     if (placed) {
       dispatch({ type: "select-piece", pieceId: placed.pieceId });
+      return;
+    }
+    if (event.shiftKey) {
+      dispatch({ type: "cycle-cell-mark", index });
       return;
     }
     if (!selectedPiece) {
@@ -2625,6 +2669,8 @@ export function App() {
       : findPlacementAtBoardPoint(puzzle, boardPlacements(state.puzzle.board), event.currentTarget, event.clientX, event.clientY);
     if (placed && !state.puzzle.cleared) {
       dispatch({ type: "remove-piece", pieceId: placed.pieceId });
+    } else if (Number.isFinite(targetIndex) && !state.puzzle.cleared) {
+      dispatch({ type: "cycle-cell-mark", index: targetIndex });
     }
   };
 
@@ -2882,18 +2928,20 @@ export function App() {
                   const scanner = scannerCells.has(index);
                   const solverPreview = solverPreviewCells.has(index);
                   const selectedPlacement = placed?.pieceId === state.selectedPieceId;
+                  const cellMark = state.cellMarks[index] ?? 0;
                   return (
                     <button
                       key={index}
                       type="button"
                       data-testid={`cell-${index}`}
+                      data-cell-mark={cellMark}
                       role="gridcell"
-                      className={`cell ${blocked ? "blocked" : ""} ${placed ? "placed" : ""} ${selectedPlacement ? "selected-placement" : ""} ${preview && !invalidPreview ? "preview" : ""} ${preview && invalidPreview ? "invalid-preview" : ""} ${scanner ? "scanner" : ""} ${solverPreview ? "solver-preview" : ""}`}
+                      className={`cell ${blocked ? "blocked" : ""} ${placed ? "placed" : ""} ${cellMark ? `mark-${cellMark}` : ""} ${selectedPlacement ? "selected-placement" : ""} ${preview && !invalidPreview ? "preview" : ""} ${preview && invalidPreview ? "invalid-preview" : ""} ${scanner ? "scanner" : ""} ${solverPreview ? "solver-preview" : ""}`}
                       style={mergeCellStyle(placed, preview && selectedPiece ? selectedPiece : null, puzzle.seed)}
                       disabled={blocked || state.puzzle.cleared}
                       onMouseEnter={() => setHoverCell(index)}
                       onFocus={() => setHoverCell(index)}
-                      onClick={() => handleCellClick(index)}
+                      onClick={(event) => handleCellClick(index, event)}
                     >
                       {placed?.pieceType ?? ""}
                     </button>
