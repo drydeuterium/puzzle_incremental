@@ -3,9 +3,11 @@ import { defineConfig, devices, type PlaywrightTestConfig } from "@playwright/te
 const projects: PlaywrightTestConfig["projects"] = process.env.CI
   ? [
       { name: "chromium", use: { ...devices["Desktop Chrome"] } },
+      { name: "mobile-chromium", use: { ...devices["Pixel 5"] } },
     ]
   : [
       { name: "msedge", use: { ...devices["Desktop Chrome"], channel: "msedge" } },
+      { name: "mobile-msedge", use: { ...devices["Pixel 5"], channel: "msedge" } },
     ];
 
 export default defineConfig({

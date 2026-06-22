@@ -290,6 +290,11 @@ button:disabled {
   margin-top: 12px;
 }
 
+.mobile-board-actions,
+.mobile-bottom-nav {
+  display: none;
+}
+
 .board-panel {
   display: grid;
   grid-template-rows: minmax(0, 1fr) 10px var(--center-solver-height);
@@ -1246,5 +1251,302 @@ button:disabled {
 
   .settings-grid {
     overflow: visible;
+  }
+}
+
+@media (max-width: 700px) {
+  html,
+  body {
+    width: 100%;
+    overflow-x: hidden;
+  }
+
+  .app {
+    width: calc(100% / var(--ui-scale));
+    min-height: calc(100dvh / var(--ui-scale));
+    overflow-x: hidden;
+  }
+
+  .topbar {
+    position: sticky;
+    top: 0;
+    grid-template-columns: 1fr;
+    gap: 8px;
+    padding: 8px 10px;
+  }
+
+  .topbar h1 {
+    font-size: 18px;
+  }
+
+  .topbar-prestige,
+  .topbar-actions {
+    justify-content: flex-start;
+  }
+
+  .topbar-actions {
+    gap: 6px;
+  }
+
+  .metric {
+    min-width: 72px;
+  }
+
+  .metric span {
+    font-size: 10px;
+  }
+
+  .topbar-actions button,
+  .topbar-prestige button {
+    min-height: 32px;
+    padding: 4px 8px;
+  }
+
+  .layout {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 8px 8px calc(78px + env(safe-area-inset-bottom));
+    overflow: visible;
+  }
+
+  .layout > .left-panel,
+  .layout > .board-panel,
+  .layout > .side-panel {
+    display: none;
+  }
+
+  .mobile-tab-pieces .layout > .left-panel,
+  .mobile-tab-board .layout > .board-panel,
+  .mobile-tab-solver .layout > .board-panel,
+  .mobile-tab-solver .layout > .side-panel,
+  .mobile-tab-upgrades .layout > .side-panel {
+    display: grid;
+  }
+
+  .mobile-tab-solver .layout > .side-panel {
+    order: 1;
+  }
+
+  .mobile-tab-solver .layout > .board-panel {
+    order: 2;
+  }
+
+  .mobile-tab-board .solver-lane,
+  .mobile-tab-board .side-panel,
+  .mobile-tab-solver .puzzle-panel,
+  .mobile-tab-solver .upgrade-section,
+  .mobile-tab-upgrades .solver-section,
+  .mobile-tab-upgrades .board-panel,
+  .mobile-tab-upgrades .left-panel,
+  .mobile-tab-pieces .board-panel,
+  .mobile-tab-pieces .side-panel {
+    display: none;
+  }
+
+  .left-panel,
+  .board-panel,
+  .side-panel {
+    grid-template-rows: auto;
+    overflow: visible;
+  }
+
+  .side-panel,
+  .solver-section,
+  .upgrade-section,
+  .solver-lane {
+    min-height: 0;
+    overflow: visible;
+  }
+
+  .piece-tray {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    overflow: visible;
+    padding-right: 0;
+  }
+
+  .piece-card {
+    grid-template-columns: 36px minmax(0, 1fr);
+    gap: 6px;
+    min-height: 62px;
+    padding: 7px;
+  }
+
+  .piece-status {
+    grid-column: 2;
+    justify-self: start;
+  }
+
+  .controls {
+    position: sticky;
+    bottom: calc(66px + env(safe-area-inset-bottom));
+    z-index: 4;
+    padding: 8px;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    background: color-mix(in srgb, var(--surface) 94%, transparent);
+  }
+
+  .puzzle-panel {
+    gap: 8px;
+    overflow: visible;
+  }
+
+  .board-header {
+    gap: 6px;
+  }
+
+  .tier-switcher {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .tier-switcher button {
+    min-height: 34px;
+  }
+
+  .board-viewport {
+    justify-items: center;
+    overflow: auto;
+    max-width: 100%;
+    padding: 12px 6px 84px;
+  }
+
+  .board {
+    max-width: none;
+  }
+
+  .cell {
+    min-width: 22px;
+    min-height: 22px;
+    border-radius: 3px;
+  }
+
+  .mobile-board-actions {
+    position: sticky;
+    bottom: calc(66px + env(safe-area-inset-bottom));
+    z-index: 4;
+    display: grid;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    gap: 6px;
+    padding: 8px;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    background: color-mix(in srgb, var(--surface) 94%, transparent);
+  }
+
+  .mobile-selection-summary {
+    grid-column: 1 / -1;
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    justify-content: space-between;
+    min-width: 0;
+    color: var(--muted);
+    font-size: 12px;
+    font-weight: 700;
+  }
+
+  .mobile-board-actions button {
+    min-width: 0;
+    min-height: 36px;
+    padding: 4px;
+    font-size: 12px;
+  }
+
+  .mobile-board-actions button.selected,
+  .mobile-bottom-nav button.selected {
+    border-color: var(--accent);
+    box-shadow: inset 0 0 0 2px var(--accent);
+  }
+
+  .solver-grid {
+    overflow: visible;
+  }
+
+  .solver-run-list {
+    grid-template-columns: 1fr;
+    overflow: visible;
+    padding-right: 0;
+  }
+
+  .upgrade-section {
+    grid-template-rows: auto auto auto auto;
+  }
+
+  .upgrade-list {
+    overflow: visible;
+    padding-right: 0;
+  }
+
+  .upgrade-toolbar {
+    grid-template-columns: 1fr;
+  }
+
+  .upgrade-sort {
+    grid-column: auto;
+    grid-template-columns: 1fr;
+  }
+
+  .mobile-bottom-nav {
+    position: fixed;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    z-index: 15;
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 6px;
+    padding: 8px 8px calc(8px + env(safe-area-inset-bottom));
+    border-top: 1px solid var(--line);
+    background: color-mix(in srgb, var(--surface) 96%, transparent);
+  }
+
+  .mobile-bottom-nav button {
+    min-width: 0;
+    min-height: 42px;
+    padding: 6px 4px;
+    font-weight: 800;
+  }
+
+  .modal {
+    align-items: end;
+    padding: 0;
+  }
+
+  .modal-body,
+  .modal-body.prestige-body,
+  .settings-body,
+  .tutorial-body {
+    width: 100%;
+    height: min(100dvh, calc(100vh - 8px));
+    max-height: min(100dvh, calc(100vh - 8px));
+    padding: 14px;
+    border-radius: 12px 12px 0 0;
+  }
+
+  .modal-body {
+    overflow-y: auto;
+  }
+
+  .modal-body.prestige-body,
+  .settings-body {
+    overflow: hidden;
+  }
+
+  .prestige-summary,
+  .challenge-summary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .challenge-content-grid,
+  .settings-grid {
+    grid-template-columns: 1fr;
+    overflow-y: auto;
+  }
+}
+
+@media (min-width: 420px) and (max-width: 700px) {
+  .solver-run-list {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }

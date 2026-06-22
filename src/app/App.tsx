@@ -75,6 +75,7 @@ type SolverRunSession = Readonly<{
 type UpgradeTabId = "feature" | "tier" | "solver";
 type UpgradeSortOrder = "price-asc" | "config";
 type PrestigeTabId = "summary" | "upgrades" | "challenge";
+type MobileTabId = "board" | "pieces" | "solver" | "upgrades";
 type CellMark = 1 | 2 | 3;
 type PendingConfirmation =
   | Readonly<{ type: "reset-board" }>
@@ -121,6 +122,7 @@ type AppState = Readonly<{
 }>;
 
 const UPGRADE_TABS: readonly UpgradeTabId[] = ["feature", "tier", "solver"];
+const MOBILE_TABS: readonly MobileTabId[] = ["board", "pieces", "solver", "upgrades"];
 
 const UPGRADE_TAB_BY_ID: Record<UpgradeId, UpgradeTabId> = {
   "placement-scanner": "feature",
@@ -404,8 +406,19 @@ const COPY = {
     stats: "Stats",
     tutorial: "Tutorial",
     pieces: "Pieces",
+    mobileNavigation: "Mobile navigation",
+    mobileTabs: {
+      board: "Board",
+      pieces: "Pieces",
+      solver: "Solver",
+      upgrades: "Upgrades",
+    },
     ready: "Ready",
     placed: "Placed",
+    selectedPiece: "Selected",
+    noSelectedPiece: "No piece selected",
+    clearSelection: "Clear selection",
+    memoMode: "Memo",
     rotation: "rot",
     newPuzzle: "New Puzzle",
     dailySeed: "Daily Seed",
@@ -619,8 +632,19 @@ const COPY = {
     stats: "統計",
     tutorial: "チュートリアル",
     pieces: "ピース",
+    mobileNavigation: "スマホナビゲーション",
+    mobileTabs: {
+      board: "盤面",
+      pieces: "ピース",
+      solver: "ソルバー",
+      upgrades: "強化",
+    },
     ready: "未配置",
     placed: "配置済み",
+    selectedPiece: "選択中",
+    noSelectedPiece: "ピース未選択",
+    clearSelection: "選択解除",
+    memoMode: "メモ",
     rotation: "回転",
     newPuzzle: "新規パズル",
     dailySeed: "今日のシード",
@@ -926,17 +950,40 @@ function useMeasuredElement<T extends HTMLElement>(): readonly [React.RefObject<
   return [ref, size] as const;
 }
 
+function useMediaQuery(query: string): boolean {
+  const [matches, setMatches] = useState(() => (
+    typeof window !== "undefined"
+    && typeof window.matchMedia === "function"
+    && window.matchMedia(query).matches
+  ));
+
+  useEffect(() => {
+    if (typeof window === "undefined" || typeof window.matchMedia !== "function") {
+      return undefined;
+    }
+    const media = window.matchMedia(query);
+    const onChange = () => setMatches(media.matches);
+    onChange();
+    media.addEventListener("change", onChange);
+    return () => media.removeEventListener("change", onChange);
+  }, [query]);
+
+  return matches;
+}
+
 function boardMaxCellPixels(tier: number): number {
   return BOARD_MAX_CELL_PIXELS_BY_TIER[tier] ?? BOARD_DEFAULT_MAX_CELL_PIXELS;
 }
 
-function boardCellSize(size: ElementSize, columns: number, rows: number, tier: number): number | null {
+function boardCellSize(size: ElementSize, columns: number, rows: number, tier: number, widthFirst: boolean): number | null {
   if (size.width <= 0 || size.height <= 0 || columns <= 0 || rows <= 0) {
     return null;
   }
   const usableWidth = size.width - BOARD_GAP_PIXELS * (columns - 1);
   const usableHeight = size.height - BOARD_GAP_PIXELS * (rows - 1);
-  const rawSize = Math.min(usableWidth / columns, usableHeight / rows, boardMaxCellPixels(tier));
+  const rawSize = widthFirst
+    ? Math.min(usableWidth / columns, boardMaxCellPixels(tier))
+    : Math.min(usableWidth / columns, usableHeight / rows, boardMaxCellPixels(tier));
   if (!Number.isFinite(rawSize)) {
     return null;
   }
@@ -2184,10 +2231,13 @@ export function App() {
   const [panelLayout, setPanelLayout] = useState<PanelLayout>(loadPanelLayout);
   const [activeUpgradeTab, setActiveUpgradeTab] = useState<UpgradeTabId>("feature");
   const [activePrestigeTab, setActivePrestigeTab] = useState<PrestigeTabId>("summary");
+  const [activeMobileTab, setActiveMobileTab] = useState<MobileTabId>("board");
+  const [memoMode, setMemoMode] = useState(false);
   const [upgradeSortOrder, setUpgradeSortOrder] = useState<UpgradeSortOrder>("price-asc");
   const [hideCompletedUpgradeTabs, setHideCompletedUpgradeTabs] = useState(false);
   const [pendingConfirmation, setPendingConfirmation] = useState<PendingConfirmation | null>(null);
   const [boardViewportRef, boardViewportSize] = useMeasuredElement<HTMLDivElement>();
+  const isMobileLayout = useMediaQuery("(max-width: 700px)");
 
   useEffect(() => {
     try {
@@ -2249,8 +2299,8 @@ export function App() {
   const puzzle = state.puzzle.definition;
   const visibleTiers = useMemo(() => GAME_CONFIG.tiers.filter((tier) => isTierVisibleForSave(state.save, tier.id)), [state.save]);
   const measuredBoardCellSize = useMemo(
-    () => boardCellSize(boardViewportSize, puzzle.width, puzzle.height, puzzle.tier),
-    [boardViewportSize, puzzle.height, puzzle.tier, puzzle.width],
+    () => boardCellSize(boardViewportSize, puzzle.width, puzzle.height, puzzle.tier, isMobileLayout),
+    [boardViewportSize, isMobileLayout, puzzle.height, puzzle.tier, puzzle.width],
   );
   const boardStyle = useMemo(() => {
     const measuredStyle = measuredBoardCellSize
@@ -2276,6 +2326,8 @@ export function App() {
     return map;
   }, [state.puzzle.board]);
   const selectedPiece = puzzle.pieces.find((piece) => piece.id === state.selectedPieceId) ?? null;
+  const selectedPiecePlacement = selectedPiece ? state.puzzle.board.placementsByPieceId[selectedPiece.id] ?? null : null;
+  const selectedPieceIsPlaced = Boolean(selectedPiecePlacement);
   const trayPieces = useMemo(() => [...puzzle.pieces].sort(comparePieceTrayOrder), [puzzle.pieces]);
   const selectedPlacementPreview = useMemo(() => {
     if (!selectedPiece || hoverCell === null || state.puzzle.cleared) {
@@ -2566,6 +2618,25 @@ export function App() {
     applyTierSwitch(tier, timestamp);
   };
 
+  const selectPieceFromTray = (pieceId: string) => {
+    setMemoMode(false);
+    dispatch({ type: "select-piece", pieceId });
+    if (isMobileLayout) {
+      setActiveMobileTab("board");
+    }
+  };
+
+  const toggleMemoMode = () => {
+    const nextMemoMode = !memoMode;
+    setMemoMode(nextMemoMode);
+    if (nextMemoMode) {
+      dispatch({ type: "select-piece", pieceId: null });
+      if (isMobileLayout) {
+        setActiveMobileTab("board");
+      }
+    }
+  };
+
   const confirmPendingAction = () => {
     const action = pendingConfirmation;
     setPendingConfirmation(null);
@@ -2642,10 +2713,11 @@ export function App() {
   const handleCellClick = (index: number, event: React.MouseEvent<HTMLButtonElement>) => {
     const placed = placedByCell.get(index);
     if (placed) {
+      setMemoMode(false);
       dispatch({ type: "select-piece", pieceId: placed.pieceId });
       return;
     }
-    if (event.shiftKey) {
+    if (memoMode || event.shiftKey) {
       dispatch({ type: "cycle-cell-mark", index });
       return;
     }
@@ -2736,7 +2808,15 @@ export function App() {
   const solverRunSlots = Array.from({ length: SOLVER_LANE_SLOT_COUNT }, (_, laneIndex) => displaySolverRuns.find((run) => run.laneIndex === laneIndex) ?? null);
 
   const theme = state.save.settings.theme ?? "system";
-  const appClassName = ["app", state.save.settings.highContrast ? "high-contrast" : "", theme === "dark" ? "dark" : "", theme === "light" ? "light" : ""].filter(Boolean).join(" ");
+  const appClassName = [
+    "app",
+    state.save.settings.highContrast ? "high-contrast" : "",
+    theme === "dark" ? "dark" : "",
+    theme === "light" ? "light" : "",
+    isMobileLayout ? "mobile-layout" : "",
+    isMobileLayout ? `mobile-tab-${activeMobileTab}` : "",
+    memoMode ? "memo-mode" : "",
+  ].filter(Boolean).join(" ");
   const appStyle = { "--ui-scale": state.save.settings.uiScale } as React.CSSProperties;
   const prestigeVisible = (state.save.progression.upgradeLevels["tier-9"] ?? 0) > 0
     || state.save.prestige.count > 0
@@ -2783,7 +2863,7 @@ export function App() {
     : copy.discardConfirmAction;
 
   return (
-    <main className={appClassName} style={appStyle}>
+    <main className={appClassName} style={appStyle} data-testid="app-shell">
       <header className="topbar">
         <h1>puzzle_incremental</h1>
         <div className="topbar-prestige">
@@ -2834,7 +2914,7 @@ export function App() {
                   className={`piece-card ${state.selectedPieceId === piece.id ? "selected" : ""} ${placed ? "placed-card" : ""}`}
                   style={pieceColorVariables(piece, puzzle.seed)}
                   disabled={state.puzzle.cleared}
-                  onClick={() => dispatch({ type: "select-piece", pieceId: piece.id })}
+                  onClick={() => selectPieceFromTray(piece.id)}
                   onContextMenu={(event) => {
                     event.preventDefault();
                     if (placed) {
@@ -2949,6 +3029,21 @@ export function App() {
                 })}
               </div>
             </div>
+            {isMobileLayout && (
+              <div className="mobile-board-actions" data-testid="mobile-board-actions">
+                <div className="mobile-selection-summary">
+                  <span>{selectedPiece ? `${copy.selectedPiece}: ${selectedPiece.type} #${selectedPiece.id.slice(1)}` : copy.noSelectedPiece}</span>
+                  {selectedPiece && <span>{selectedPieceIsPlaced ? copy.placed : copy.ready}</span>}
+                </div>
+                <button type="button" onClick={() => dispatch({ type: "rotate", direction: -1 })} disabled={!selectedPiece || state.puzzle.cleared}>{copy.rotateLeft}</button>
+                <button type="button" onClick={() => dispatch({ type: "rotate", direction: 1 })} disabled={!selectedPiece || state.puzzle.cleared}>{copy.rotateRight}</button>
+                <button type="button" onClick={() => dispatch({ type: "select-piece", pieceId: null })} disabled={!selectedPiece}>{copy.clearSelection}</button>
+                <button type="button" onClick={() => dispatch({ type: "remove-selected" })} disabled={!selectedPieceIsPlaced || state.puzzle.cleared}>{copy.removePiece}</button>
+                <button type="button" className={memoMode ? "selected" : ""} onClick={toggleMemoMode} disabled={state.puzzle.cleared}>
+                  {copy.memoMode}: {memoMode ? copy.on : copy.off}
+                </button>
+              </div>
+            )}
             {state.inspectionMessage && (
               <div className="inspection-message" role="status" aria-live="polite">
                 <span>{state.inspectionMessage}</span>
@@ -3113,6 +3208,23 @@ export function App() {
           </section>
         </aside>
       </section>
+
+      {isMobileLayout && (
+        <nav className="mobile-bottom-nav" role="tablist" aria-label={copy.mobileNavigation}>
+          {MOBILE_TABS.map((tab) => (
+            <button
+              key={tab}
+              type="button"
+              role="tab"
+              aria-selected={activeMobileTab === tab}
+              className={activeMobileTab === tab ? "selected" : ""}
+              onClick={() => setActiveMobileTab(tab)}
+            >
+              {copy.mobileTabs[tab]}
+            </button>
+          ))}
+        </nav>
+      )}
 
       {pendingConfirmation && (
         <div className="modal" role="dialog" aria-modal="true">

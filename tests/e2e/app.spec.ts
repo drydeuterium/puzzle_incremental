@@ -1,4 +1,11 @@
-import { test, expect } from "@playwright/test";
+import { test, expect, type Page } from "@playwright/test";
+
+async function openMobileTabIfVisible(page: Page, name: string): Promise<void> {
+  const tab = page.getByRole("tab", { name });
+  if ((await tab.count()) > 0 && await tab.first().isVisible()) {
+    await tab.first().click();
+  }
+}
 
 test.beforeEach(async ({ page }) => {
   await page.goto("/");
@@ -98,21 +105,30 @@ test("fresh start manual clear", async ({ page }) => {
     localStorage.setItem("puzzle_incremental.save.backup", JSON.stringify(save));
   });
   await page.reload();
+  await openMobileTabIfVisible(page, "Upgrades");
   await page.getByRole("tab", { name: "Tier" }).click();
   const tierOneCard = page.getByRole("tabpanel", { name: "Tier" }).locator(".upgrade").filter({ hasText: "Tier 1" }).first();
   await expect(tierOneCard).toContainText("requires a manual Tier 0 clear this prestige");
-  await expect(tierOneCard.getByRole("button", { name: "Buy" })).toBeDisabled();
+  await expect(tierOneCard.getByRole("button", { name: /Buy/ })).toBeDisabled();
 
   const anchors = [0, 2, 8, 10];
   for (let index = 0; index < anchors.length; index += 1) {
+    await openMobileTabIfVisible(page, "Pieces");
     await page.getByTestId(`piece-p${index}`).click();
     await page.getByTestId(`cell-${anchors[index]}`).click();
   }
   await expect(page.getByRole("dialog").getByText(/manual clear/i)).toBeVisible();
   await expect(page.getByTestId("compute")).not.toHaveText("0 C");
   await page.getByRole("button", { name: "Close" }).click();
+  await openMobileTabIfVisible(page, "Solver");
+  if ((await page.locator(".mobile-bottom-nav").count()) > 0) {
+    await expect(page.getByTestId("solver-status")).toBeVisible();
+    await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBe(true);
+  }
+  await openMobileTabIfVisible(page, "Upgrades");
+  await page.getByRole("tab", { name: "Tier" }).click();
   await expect(tierOneCard).not.toContainText("requires a manual Tier 0 clear this prestige");
-  await expect(tierOneCard.getByRole("button", { name: "Buy" })).toBeEnabled();
+  await expect(tierOneCard.getByRole("button", { name: /Buy/ })).toBeEnabled();
 });
 
 test("settings and persistence shell work", async ({ page }) => {

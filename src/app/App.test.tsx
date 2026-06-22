@@ -518,6 +518,19 @@ function upgradeNamesInPanel(panel: HTMLElement): string[] {
   return Array.from(panel.querySelectorAll(".upgrade-header strong")).map((element) => element.textContent ?? "");
 }
 
+function stubMobileViewport(): void {
+  vi.stubGlobal("matchMedia", vi.fn().mockImplementation((query: string) => ({
+    matches: query === "(max-width: 700px)",
+    media: query,
+    onchange: null,
+    addEventListener: vi.fn(),
+    removeEventListener: vi.fn(),
+    addListener: vi.fn(),
+    removeListener: vi.fn(),
+    dispatchEvent: vi.fn(),
+  })));
+}
+
 describe("App", () => {
   beforeEach(() => {
     vi.unstubAllGlobals();
@@ -712,6 +725,40 @@ describe("App", () => {
     await user.click(piece);
     await user.click(cell);
     expect(cell).toHaveAttribute("data-cell-mark", "0");
+  });
+
+  it("uses mobile tabs and board action bar for touch play", async () => {
+    stubMobileViewport();
+    seedTwoPiecePuzzle();
+    const user = userEvent.setup();
+    render(<App />);
+    const app = screen.getByTestId("app-shell");
+    const piece = screen.getByTestId("piece-p0");
+    const cell = screen.getByTestId("cell-0");
+    const toolbar = screen.getByTestId("mobile-board-actions");
+
+    expect(app).toHaveClass("mobile-tab-board");
+    await user.click(screen.getByRole("tab", { name: "Pieces" }));
+    expect(app).toHaveClass("mobile-tab-pieces");
+
+    await user.click(piece);
+    expect(app).toHaveClass("mobile-tab-board");
+    await user.click(within(toolbar).getByRole("button", { name: "Rotate Right" }));
+    expect(piece).toHaveTextContent("rot 1");
+
+    await user.click(cell);
+    expect(piece).toHaveTextContent("Placed");
+    expect(piece).not.toHaveClass("selected");
+
+    await user.click(cell);
+    expect(piece).toHaveClass("selected");
+    await user.click(within(toolbar).getByRole("button", { name: "Remove Piece" }));
+    expect(piece).toHaveTextContent("Ready");
+    expect(cell).toHaveTextContent("");
+
+    await user.click(within(toolbar).getByRole("button", { name: /Memo/ }));
+    await user.click(cell);
+    expect(cell).toHaveAttribute("data-cell-mark", "1");
   });
 
   it("does not show a toast when a placed piece cannot rotate", async () => {
