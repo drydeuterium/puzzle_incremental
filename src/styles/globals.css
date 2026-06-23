@@ -1020,6 +1020,10 @@ button:disabled {
   gap: 6px;
 }
 
+.modal-body .mobile-prestige-tab-select {
+  display: none;
+}
+
 .setting-range-field {
   padding: 8px 10px;
   border: 1px solid var(--line);
