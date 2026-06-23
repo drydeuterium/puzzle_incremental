@@ -1020,7 +1020,7 @@ button:disabled {
   gap: 6px;
 }
 
-.modal-body .mobile-prestige-tab-select {
+.modal-body label.mobile-prestige-tab-select {
   display: none;
 }
 
@@ -1610,7 +1610,7 @@ button:disabled {
     display: none;
   }
 
-  .mobile-prestige-tab-select {
+  .modal-body label.mobile-prestige-tab-select {
     display: grid;
     grid-template-columns: auto minmax(0, 1fr);
     align-items: center;
