@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="puzzle_incremental">
+  <defs>
+    <pattern id="blocked-stripes" width="8" height="8" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+      <rect width="8" height="8" fill="#202a27" />
+      <rect width="3" height="8" fill="#3b423e" opacity="0.75" />
+    </pattern>
+    <linearGradient id="piece-fill" x1="10" y1="10" x2="54" y2="54" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#5f8052" />
+      <stop offset="1" stop-color="#2f7a56" />
+    </linearGradient>
+  </defs>
+  <rect width="64" height="64" rx="12" fill="#101a16" />
+  <rect x="5" y="5" width="54" height="54" rx="9" fill="#14221d" stroke="#2d4238" stroke-width="2" />
+  <g stroke="#314a40" stroke-width="2">
+    <rect x="11" y="11" width="12" height="12" rx="2" fill="url(#piece-fill)" />
+    <rect x="25" y="11" width="12" height="12" rx="2" fill="url(#piece-fill)" />
+    <rect x="39" y="11" width="12" height="12" rx="2" fill="#1a2a24" />
+    <rect x="11" y="25" width="12" height="12" rx="2" fill="url(#piece-fill)" />
+    <rect x="25" y="25" width="12" height="12" rx="2" fill="#1a2a24" />
+    <rect x="39" y="25" width="12" height="12" rx="2" fill="#1a2a24" />
+    <rect x="11" y="39" width="12" height="12" rx="2" fill="url(#piece-fill)" />
+    <rect x="25" y="39" width="12" height="12" rx="2" fill="url(#blocked-stripes)" />
+    <rect x="39" y="39" width="12" height="12" rx="2" fill="url(#blocked-stripes)" />
+  </g>
+  <path d="M12 12h38" stroke="#83b078" stroke-width="2" stroke-linecap="round" opacity="0.55" />
+</svg>
