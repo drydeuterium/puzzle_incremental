@@ -2342,13 +2342,16 @@ export function App() {
   const selectedPiece = puzzle.pieces.find((piece) => piece.id === state.selectedPieceId) ?? null;
   const selectedPiecePlacement = selectedPiece ? state.puzzle.board.placementsByPieceId[selectedPiece.id] ?? null : null;
   const selectedPieceIsPlaced = Boolean(selectedPiecePlacement);
+  const selectedPieceOrientation = selectedPiece
+    ? selectedPiecePlacement?.orientationIndex ?? state.rotations[selectedPiece.id] ?? 0
+    : 0;
   const trayPieces = useMemo(() => [...puzzle.pieces].sort(comparePieceTrayOrder), [puzzle.pieces]);
   const selectedPlacementPreview = useMemo(() => {
     if (!selectedPiece || hoverCell === null || state.puzzle.cleared) {
       return null;
     }
-    return choosePlacementPreviewForCell(puzzle, state.puzzle.board, selectedPiece, state.rotations[selectedPiece.id] ?? 0, hoverCell);
-  }, [hoverCell, puzzle, selectedPiece, state.puzzle.board, state.puzzle.cleared, state.rotations]);
+    return choosePlacementPreviewForCell(puzzle, state.puzzle.board, selectedPiece, selectedPieceOrientation, hoverCell);
+  }, [hoverCell, puzzle, selectedPiece, selectedPieceOrientation, state.puzzle.board, state.puzzle.cleared]);
   const language = state.save.settings.language ?? "en";
   const copy = COPY[language];
   const upgradeLevels = state.save.progression.upgradeLevels;
@@ -2738,7 +2741,7 @@ export function App() {
     if (!selectedPiece) {
       return;
     }
-    const preview = choosePlacementPreviewForCell(puzzle, state.puzzle.board, selectedPiece, state.rotations[selectedPiece.id] ?? 0, index);
+    const preview = choosePlacementPreviewForCell(puzzle, state.puzzle.board, selectedPiece, selectedPieceOrientation, index);
     if (!preview) {
       dispatch({ type: "toast", message: copy.noLegalPlacement });
       return;

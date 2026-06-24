@@ -36,6 +36,36 @@ function seedKeyboardRotationPuzzle(): void {
   window.localStorage.setItem(BACKUP_SAVE_KEY, JSON.stringify(save));
 }
 
+function seedPlacedIRotationPuzzle(): void {
+  const now = new Date("2026-01-01T00:00:00.000Z");
+  const base = createInitialSave(now);
+  const save = {
+    ...base,
+    settings: { ...base.settings, language: "en", tutorialCompleted: true },
+    currentPuzzle: {
+      definition: {
+        id: "placed-i-rotation-fixture",
+        generatorVersion: GAME_CONFIG.generatorVersion,
+        tier: 0,
+        seed: "placed-i-rotation-fixture",
+        width: 4,
+        height: 4,
+        usableCellIndices: Array.from({ length: 16 }, (_, index) => index),
+        blockedCellIndices: [],
+        pieces: [{ id: "p0", type: "I" }],
+        difficulty: { score: 1, solutionNodes: 1, backtracks: 0, maxDepth: 1, forcedRatio: 1, initialBranching: 1, capped: false },
+      },
+      placements: [{ pieceId: "p0", orientationIndex: 1, anchor: { x: 0, y: 0 } }],
+      classification: "manual",
+      startedAt: now.toISOString(),
+      elapsedMilliseconds: 0,
+      cleared: false,
+    },
+  };
+  window.localStorage.setItem(SAVE_KEY, JSON.stringify(save));
+  window.localStorage.setItem(BACKUP_SAVE_KEY, JSON.stringify(save));
+}
+
 function seedTwoPiecePuzzle(): void {
   const now = new Date("2026-01-01T00:00:00.000Z");
   const base = createInitialSave(now);
@@ -645,6 +675,20 @@ describe("App", () => {
 
     await user.keyboard("{ArrowLeft}");
     expect(piece).toHaveTextContent("rot 0");
+  });
+
+  it("keeps a placed piece rotation when moving it", async () => {
+    seedPlacedIRotationPuzzle();
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.click(screen.getByTestId("cell-0"));
+    await user.click(screen.getByTestId("cell-1"));
+
+    expect(screen.getByTestId("piece-p0")).toHaveTextContent("rot 1");
+    expect(screen.getByTestId("cell-0")).toHaveTextContent("");
+    expect(screen.getByTestId("cell-1")).toHaveTextContent("I");
+    expect(screen.getByTestId("cell-13")).toHaveTextContent("I");
   });
 
   it("uses R for board reset with an in-app confirmation dialog", async () => {
