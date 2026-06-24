@@ -1,6 +1,7 @@
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { createPlacement } from "../core/board";
 import { GAME_CONFIG } from "../game/config";
 import { BACKUP_SAVE_KEY, createInitialSave, SAVE_KEY } from "../persistence/schema";
 import { App } from "./App";
@@ -55,6 +56,41 @@ function seedTwoPiecePuzzle(): void {
         difficulty: { score: 1, solutionNodes: 1, backtracks: 0, maxDepth: 2, forcedRatio: 1, initialBranching: 2, capped: false },
       },
       placements: [],
+      classification: "manual",
+      startedAt: now.toISOString(),
+      elapsedMilliseconds: 0,
+      cleared: false,
+    },
+  };
+  window.localStorage.setItem(SAVE_KEY, JSON.stringify(save));
+  window.localStorage.setItem(BACKUP_SAVE_KEY, JSON.stringify(save));
+}
+
+function seedPlacedTRotationPuzzle(): void {
+  const now = new Date("2026-01-01T00:00:00.000Z");
+  const base = createInitialSave(now);
+  const width = 6;
+  const blockedCell = 28;
+  const piece = { id: "p0", type: "T" } as const;
+  const definition = {
+    id: "placed-t-rotation-fixture",
+    generatorVersion: GAME_CONFIG.generatorVersion,
+    tier: 0,
+    seed: "placed-t-rotation-fixture",
+    width,
+    height: 5,
+    usableCellIndices: Array.from({ length: width * 5 }, (_, index) => index).filter((index) => index !== blockedCell),
+    blockedCellIndices: [blockedCell],
+    pieces: [piece],
+    difficulty: { score: 1, solutionNodes: 1, backtracks: 0, maxDepth: 1, forcedRatio: 1, initialBranching: 1, capped: false },
+  };
+  const placement = createPlacement(definition, piece, 0, { x: 3, y: 2 });
+  const save = {
+    ...base,
+    settings: { ...base.settings, language: "en", tutorialCompleted: true },
+    currentPuzzle: {
+      definition,
+      placements: [{ pieceId: placement.pieceId, orientationIndex: placement.orientationIndex, anchor: placement.anchor }],
       classification: "manual",
       startedAt: now.toISOString(),
       elapsedMilliseconds: 0,
@@ -779,6 +815,20 @@ describe("App", () => {
 
     expect(screen.queryByRole("status")).not.toBeInTheDocument();
     expect(firstPiece).toHaveTextContent("rot 0");
+  });
+
+  it("rotates placed pieces to the nearest overlapping legal anchor", async () => {
+    seedPlacedTRotationPuzzle();
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.click(screen.getByTestId("piece-p0"));
+    await user.click(screen.getByRole("button", { name: "Rotate Right" }));
+
+    expect(screen.getByTestId("piece-p0")).toHaveTextContent("rot 1");
+    expect(screen.getByTestId("cell-10")).toHaveTextContent("T");
+    expect(screen.getByTestId("cell-17")).toHaveTextContent("");
+    expect(screen.getByTestId("cell-28")).toHaveTextContent("");
   });
 
   it("removes a placed piece when right clicking an internal board gap", async () => {

@@ -1269,6 +1269,20 @@ function withSavedPuzzle(state: AppState, patch: Partial<AppState>): AppState {
   return { ...next, save: saveFromState(next) };
 }
 
+function chooseRotatedPlacement(puzzle: PuzzleDefinition, board: BoardState, piece: PieceInstance, current: Placement, orientationIndex: number): Placement | null {
+  const currentCells = new Set(current.cellIndices);
+  const candidates = enumeratePlacements(puzzle, piece)
+    .filter((placement) => placement.orientationIndex === orientationIndex && canPlace(puzzle, board, placement).ok)
+    .map((placement) => {
+      const overlap = placement.cellIndices.filter((index) => currentCells.has(index)).length;
+      const anchorDistance = Math.abs(placement.anchor.x - current.anchor.x) + Math.abs(placement.anchor.y - current.anchor.y);
+      return { placement, overlap, anchorDistance };
+    })
+    .filter((candidate) => candidate.overlap > 0)
+    .sort((a, b) => (b.overlap - a.overlap) || (a.anchorDistance - b.anchorDistance));
+  return candidates[0]?.placement ?? null;
+}
+
 function classifyAssisted(state: AppState): RuntimePuzzle {
   return state.puzzle.classification === "manual" ? { ...state.puzzle, classification: "assisted" } : state.puzzle;
 }
@@ -1446,8 +1460,8 @@ function reducer(state: AppState, action: Action): AppState {
       const orientationCount = new Set(enumeratePlacements(state.puzzle.definition, piece).map((placement) => placement.orientationIndex)).size;
       const nextOrientation = ((current?.orientationIndex ?? state.rotations[piece.id] ?? 0) + action.direction + orientationCount) % orientationCount;
       if (current) {
-        const placement = createPlacement(state.puzzle.definition, piece, nextOrientation, current.anchor);
-        if (!canPlace(state.puzzle.definition, state.puzzle.board, placement).ok) {
+        const placement = chooseRotatedPlacement(state.puzzle.definition, state.puzzle.board, piece, current, nextOrientation);
+        if (!placement) {
           return state;
         }
         const board = applyPlacement(state.puzzle.definition, state.puzzle.board, placement);
