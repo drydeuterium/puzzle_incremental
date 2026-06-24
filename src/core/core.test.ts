@@ -71,6 +71,26 @@ describe("board placement", () => {
     expect(removed.placementsByPieceId[piece.id]).toBeUndefined();
   });
 
+  it("rejects placements that would wrap past the right board edge", () => {
+    const puzzle: PuzzleDefinition = {
+      id: "right-edge-wrap-fixture",
+      generatorVersion: 1,
+      tier: 0,
+      seed: "right-edge-wrap-fixture",
+      width: 6,
+      height: 6,
+      usableCellIndices: Array.from({ length: 36 }, (_, index) => index),
+      blockedCellIndices: [],
+      pieces: [{ id: "p0", type: "T" }],
+      difficulty: { score: 1, solutionNodes: 1, backtracks: 0, maxDepth: 1, forcedRatio: 1, initialBranching: 1, capped: false },
+    };
+    const placement = createPlacement(puzzle, puzzle.pieces[0], 0, { x: 4, y: 0 });
+
+    expect(placement.cellIndices).toContain(6);
+    expect(canPlace(puzzle, createEmptyBoard(), placement)).toEqual({ ok: false, reason: "outside" });
+    expect(applyPlacement(puzzle, createEmptyBoard(), placement).placementsByPieceId.p0).toBeUndefined();
+  });
+
   it("detects a solved construction fixture", () => {
     const puzzle = generatePuzzle({ tier: 0, seed: "solved-test" });
     expect(puzzle.constructionSolution).toBeDefined();

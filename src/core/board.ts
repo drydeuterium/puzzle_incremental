@@ -1,6 +1,8 @@
-import { cellIndex, indexToCell, isInside } from "./coordinates";
+import { cellIndex, isInside } from "./coordinates";
 import { enumerateOrientations } from "./tetrominoes";
 import type { BoardState, PieceId, PieceInstance, Placement, PlacementValidation, PuzzleDefinition } from "./types";
+
+type PlacementGeometry = Extract<PlacementValidation, { ok: false }> | Readonly<{ ok: true; placement: Placement }>;
 
 export function createEmptyBoard(): BoardState {
   return { placementsByPieceId: {} };
@@ -50,18 +52,38 @@ export function enumeratePlacements(puzzle: PuzzleDefinition, piece: PieceInstan
   return placements;
 }
 
-export function canPlace(puzzle: PuzzleDefinition, board: BoardState, placement: Placement): PlacementValidation {
-  if (!puzzle.pieces.some((piece) => piece.id === placement.pieceId)) {
+function resolvePlacementGeometry(puzzle: PuzzleDefinition, placement: Placement): PlacementGeometry {
+  const piece = puzzle.pieces.find((entry) => entry.id === placement.pieceId);
+  if (!piece) {
     return { ok: false, reason: "unknown-piece" };
+  }
+  const orientation = enumerateOrientations(piece.type)[placement.orientationIndex];
+  if (!orientation) {
+    return { ok: false, reason: "outside" };
+  }
+  const cells = orientation.cells.map((cell) => ({ x: placement.anchor.x + cell.x, y: placement.anchor.y + cell.y }));
+  if (cells.some((cell) => !isInside(puzzle.width, puzzle.height, cell))) {
+    return { ok: false, reason: "outside" };
+  }
+  return {
+    ok: true,
+    placement: {
+      ...placement,
+      pieceType: piece.type,
+      cellIndices: cells.map((cell) => cellIndex(puzzle.width, cell)),
+    },
+  };
+}
+
+export function canPlace(puzzle: PuzzleDefinition, board: BoardState, placement: Placement): PlacementValidation {
+  const resolved = resolvePlacementGeometry(puzzle, placement);
+  if (!resolved.ok) {
+    return resolved;
   }
   const blocked = new Set(puzzle.blockedCellIndices);
   const usable = new Set(puzzle.usableCellIndices);
-  const occupied = occupiedBy(removePiece(board, placement.pieceId));
-  for (const index of placement.cellIndices) {
-    const cell = indexToCell(puzzle.width, index);
-    if (!isInside(puzzle.width, puzzle.height, cell)) {
-      return { ok: false, reason: "outside" };
-    }
+  const occupied = occupiedBy(removePiece(board, resolved.placement.pieceId));
+  for (const index of resolved.placement.cellIndices) {
     if (blocked.has(index) || !usable.has(index)) {
       return { ok: false, reason: "blocked" };
     }
@@ -77,10 +99,14 @@ export function applyPlacement(puzzle: PuzzleDefinition, board: BoardState, plac
   if (!validation.ok) {
     return board;
   }
+  const resolved = resolvePlacementGeometry(puzzle, placement);
+  if (!resolved.ok) {
+    return board;
+  }
   return {
     placementsByPieceId: {
       ...board.placementsByPieceId,
-      [placement.pieceId]: placement,
+      [resolved.placement.pieceId]: resolved.placement,
     },
   };
 }
